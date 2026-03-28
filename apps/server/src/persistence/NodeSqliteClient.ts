@@ -20,7 +20,7 @@ import * as Stream from "effect/Stream";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as Client from "effect/unstable/sql/SqlClient";
 import type { Connection } from "effect/unstable/sql/SqlConnection";
-import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError";
+import { SqlError, classifySqliteError } from "effect/unstable/sql/SqlError";
 import * as Statement from "effect/unstable/sql/Statement";
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
@@ -28,6 +28,9 @@ const ATTR_DB_SYSTEM_NAME = "db.system.name";
 export const TypeId: TypeId = "~local/sqlite-node/SqliteClient";
 
 export type TypeId = "~local/sqlite-node/SqliteClient";
+
+const classifyError = (cause: unknown, message: string, operation: string) =>
+  classifySqliteError(cause, { message, operation });
 
 /**
  * SqliteClient - Effect service tag for the sqlite SQL client.
@@ -111,10 +114,7 @@ const makeWithDatabase = (
             try: () => db.prepare(sql),
             catch: (cause) =>
               new SqlError({
-                reason: classifySqliteError(cause, {
-                  message: "Failed to prepare statement",
-                  operation: "prepare",
-                }),
+                reason: classifyError(cause, "Failed to prepare statement", "prepare"),
               }),
           }),
       });
@@ -135,10 +135,7 @@ const makeWithDatabase = (
           } catch (cause) {
             return Effect.fail(
               new SqlError({
-                reason: classifySqliteError(cause, {
-                  message: "Failed to execute statement",
-                  operation: "execute",
-                }),
+                reason: classifyError(cause, "Failed to execute statement", "execute"),
               }),
             );
           }
@@ -165,10 +162,7 @@ const makeWithDatabase = (
               },
               catch: (cause) =>
                 new SqlError({
-                  reason: classifySqliteError(cause, {
-                    message: "Failed to execute statement",
-                    operation: "execute",
-                  }),
+                  reason: classifyError(cause, "Failed to execute statement", "execute"),
                 }),
             }),
           (statement) =>
