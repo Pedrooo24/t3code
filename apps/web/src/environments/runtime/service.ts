@@ -1064,8 +1064,6 @@ async function ensureSavedEnvironmentConnection(
       ...createEnvironmentConnectionHandlers(),
     });
 
-    registerConnection(connection);
-
     try {
       try {
         await refreshSavedEnvironmentMetadata(
@@ -1087,7 +1085,7 @@ async function ensureSavedEnvironmentConnection(
         activeRecord = issued.record;
         bearerToken = issued.bearerToken;
         roleHint = issued.role;
-        await removeConnection(activeRecord.environmentId).catch(() => false);
+        await connection.dispose();
         pendingSavedEnvironmentConnections.delete(activeRecord.environmentId);
         return await ensureSavedEnvironmentConnection(activeRecord, {
           bearerToken,
@@ -1095,10 +1093,14 @@ async function ensureSavedEnvironmentConnection(
           serverConfig: options?.serverConfig ?? null,
         });
       }
+      registerConnection(connection);
       return connection;
     } catch (error) {
       setRuntimeError(activeRecord.environmentId, error);
-      await removeConnection(activeRecord.environmentId).catch(() => false);
+      const removed = await removeConnection(activeRecord.environmentId).catch(() => false);
+      if (!removed) {
+        await connection.dispose().catch(() => {});
+      }
       throw error;
     }
   })();
