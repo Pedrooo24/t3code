@@ -500,10 +500,16 @@ export function waitForAbortSignal(signal: AbortSignal): Promise<void> {
  * account info and slash commands) but never starts an API request to
  * Anthropic. We read the init data and then abort the subprocess.
  *
+ * `cwd` determines how the SDK resolves the `"project"` and `"local"`
+ * setting sources, which is how project-level slash commands (including
+ * `.claude/skills/`) enter the initialization result. Pass the active
+ * project directory; otherwise the SDK falls back to the T3 server
+ * process cwd and project-level commands are missed (#2048).
+ *
  * This is used as a fallback when `claude auth status` does not include
  * subscription type information.
  */
-const probeClaudeCapabilities = (binaryPath: string) => {
+const probeClaudeCapabilities = (binaryPath: string, cwd?: string) => {
   const abort = new AbortController();
   return Effect.tryPromise(async () => {
     const q = claudeQuery({
@@ -516,6 +522,7 @@ const probeClaudeCapabilities = (binaryPath: string) => {
       options: {
         persistSession: false,
         pathToClaudeCodeExecutable: binaryPath,
+        ...(cwd ? { cwd } : {}),
         abortController: abort,
         settingSources: ["user", "project", "local"],
         allowedTools: [],
@@ -807,19 +814,29 @@ export const ClaudeProviderLive = Layer.effect(
     const serverSettings = yield* ServerSettingsService;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
+    // Cache key is `${binaryPath}|${cwd ?? ''}` so probes with different
+    // project cwds don't collide. Capacity is 8 so a handful of recent
+    // projects stay cached without ballooning memory (#2048).
     const subscriptionProbeCache = yield* Cache.make({
-      capacity: 1,
+      capacity: 8,
       timeToLive: Duration.minutes(5),
-      lookup: (binaryPath: string) => probeClaudeCapabilities(binaryPath),
+      lookup: (key: string) => {
+        const sep = key.indexOf("|");
+        const binaryPath = sep >= 0 ? key.slice(0, sep) : key;
+        const cwd = sep >= 0 ? key.slice(sep + 1) : "";
+        return probeClaudeCapabilities(binaryPath, cwd || undefined);
+      },
     });
+
+    const probeKey = (binaryPath: string, cwd?: string) => `${binaryPath}|${cwd ?? ""}`;
 
     const checkProvider = checkClaudeProviderStatus(
       (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
+        Cache.get(subscriptionProbeCache, probeKey(binaryPath)).pipe(
           Effect.map((probe) => probe?.subscriptionType),
         ),
       (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
+        Cache.get(subscriptionProbeCache, probeKey(binaryPath)).pipe(
           Effect.map((probe) => probe?.slashCommands),
         ),
     ).pipe(
