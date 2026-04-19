@@ -1007,7 +1007,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
           <EntryIcon className="size-3" />
         </span>
         {workEntry.toolKind === "mcp" && (
-          <span className="shrink-0 rounded border border-sky-500/40 bg-sky-500/10 px-1 text-[9px] font-medium uppercase tracking-wide text-sky-600 dark:text-sky-300">
+          <span className="shrink-0 rounded border border-teal-700/40 bg-teal-700/10 px-1 text-[9px] font-medium uppercase tracking-wide text-teal-700 dark:text-teal-300">
             MCP
           </span>
         )}

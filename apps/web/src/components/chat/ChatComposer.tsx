@@ -244,7 +244,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
             className={cn(
               "shrink-0 whitespace-nowrap px-2 sm:px-3",
               props.planSidebarOpen
-                ? "text-blue-400 hover:text-blue-300"
+                ? "text-teal-500 hover:text-teal-400"
                 : "text-muted-foreground/70 hover:text-foreground/80",
             )}
             size="sm"
