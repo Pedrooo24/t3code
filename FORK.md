@@ -39,3 +39,33 @@ Total: **13 commits** de cherry-pick preservando autoria (`-x`).
 - Dev: `bun run dev` (Electron + Vite).
 
 Baseline fechada: **2026-04-19**.
+
+## Feature 0 — MCPs por projecto (Claude)
+
+Isolamento de servidores MCP por projecto: threads paralelos em projectos diferentes carregam conjuntos distintos de MCPs.
+
+### Como funciona
+
+O Claude Agent SDK é chamado com `settingSources: ["user", "project", "local"]` e recebe o `cwd` do workspace do projecto, pelo que lê automaticamente `<workspaceRoot>/.claude/settings.local.json` em cada thread. O motor já existia desde o baseline; esta feature acrescenta apenas o painel de controlo no UI.
+
+### Criar override via UI
+
+1. Settings → secção "Claude MCPs (por projecto)".
+2. O painel mostra o path completo e o estado (exists / missing) para o projecto activo.
+3. Se não existir, "Criar a partir de template" gera `.claude/settings.local.json` com `mcpServers: {}` e um comentário explicativo.
+4. "Abrir no editor" abre o ficheiro no editor preferido (mesmo mecanismo das keybindings).
+
+### Editar manualmente
+
+Qualquer editor. Schema: `mcpServers: Record<string, { type: "stdio" | "sse" | "http", ... }>`. Alterações só entram em vigor em **nova thread** — não há hot-reload nesta iteração.
+
+### Aviso gitignore
+
+O ficheiro é `.claude/settings.local.json`, gitignored por convenção Claude. **Não** usar `.claude/settings.json` versionado para tokens ou credenciais.
+
+### Limitações actuais
+
+- Sem hot-reload: reiniciar thread após editar.
+- Apenas por projecto — sem MCPs por thread.
+- Sem editor visual de servidores MCP (apenas descoberta, criação e abertura).
+

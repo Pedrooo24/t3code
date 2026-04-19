@@ -1,7 +1,10 @@
 import {
+  AlertTriangleIcon,
   ArchiveIcon,
   ArchiveX,
   ChevronDownIcon,
+  FileIcon,
+  FilePlusIcon,
   InfoIcon,
   LoaderIcon,
   PlusIcon,
@@ -79,6 +82,7 @@ import {
   useServerObservability,
   useServerProviders,
 } from "../../rpc/serverState";
+import { getPrimaryEnvironmentConnection } from "../../environments/runtime";
 
 const THEME_OPTIONS = [
   {
@@ -439,6 +443,165 @@ function AboutVersionSection() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Claude MCPs por projecto
+// ---------------------------------------------------------------------------
+
+type ClaudeSettingsInfoState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; path: string; exists: boolean }
+  | { status: "error"; message: string };
+
+type ClaudeSettingsEnsureState =
+  | { status: "idle" }
+  | { status: "creating" }
+  | { status: "done" }
+  | { status: "error"; message: string };
+
+function ClaudeProjectMcpsSection({
+  workspaceRoot,
+  openInPreferredEditor,
+  isOpeningEditor,
+  openEditorError,
+}: {
+  workspaceRoot: string;
+  openInPreferredEditor: (target: "claudeMcps", path: string | null, failureMessage: string) => void;
+  isOpeningEditor: boolean;
+  openEditorError: string | null;
+}) {
+  const [infoState, setInfoState] = useState<ClaudeSettingsInfoState>({ status: "idle" });
+  const [ensureState, setEnsureState] = useState<ClaudeSettingsEnsureState>({ status: "idle" });
+
+  const fetchInfo = useCallback(() => {
+    setInfoState({ status: "loading" });
+    void getPrimaryEnvironmentConnection()
+      .client.projects.claudeSettingsInfo({ workspaceRoot })
+      .then((result) => {
+        setInfoState({ status: "loaded", path: result.path, exists: result.exists });
+      })
+      .catch((error: unknown) => {
+        setInfoState({
+          status: "error",
+          message: error instanceof Error ? error.message : "Erro ao obter estado do ficheiro.",
+        });
+      });
+  }, [workspaceRoot]);
+
+  useEffect(() => {
+    fetchInfo();
+  }, [fetchInfo]);
+
+  const handleCreate = useCallback(() => {
+    setEnsureState({ status: "creating" });
+    void getPrimaryEnvironmentConnection()
+      .client.projects.claudeSettingsEnsure({ workspaceRoot })
+      .then(() => {
+        setEnsureState({ status: "done" });
+        fetchInfo();
+      })
+      .catch((error: unknown) => {
+        setEnsureState({
+          status: "error",
+          message: error instanceof Error ? error.message : "Erro ao criar ficheiro.",
+        });
+      });
+  }, [workspaceRoot, fetchInfo]);
+
+  const settingsPath = infoState.status === "loaded" ? infoState.path : null;
+  const fileExists = infoState.status === "loaded" && infoState.exists;
+  const isLoading = infoState.status === "loading";
+  const isCreating = ensureState.status === "creating";
+
+  return (
+    <SettingsRow
+      title="MCPs do Claude (por projecto)"
+      description="Override de MCPs para este projecto. O Claude SDK le automaticamente este ficheiro ao iniciar cada thread."
+      status={
+        <div className="flex flex-col gap-1">
+          {isLoading ? (
+            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <LoaderIcon className="size-3 animate-spin" />
+              A verificar...
+            </span>
+          ) : infoState.status === "loaded" ? (
+            <span
+              className={cn(
+                "flex items-center gap-1.5 break-all font-mono text-[11px]",
+                fileExists ? "text-foreground" : "text-muted-foreground/60",
+              )}
+            >
+              {fileExists ? (
+                <FileIcon className="size-3 shrink-0 text-muted-foreground" />
+              ) : (
+                <FilePlusIcon className="size-3 shrink-0 text-muted-foreground/40" />
+              )}
+              {infoState.path}
+            </span>
+          ) : infoState.status === "error" ? (
+            <span className="text-[11px] text-destructive">{infoState.message}</span>
+          ) : null}
+
+          {fileExists ? (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <AlertTriangleIcon className="size-3 shrink-0" />
+              Este ficheiro e gitignored por convencao Claude. Nao uses{" "}
+              <code className="font-mono">settings.json</code> versionado para tokens.
+            </span>
+          ) : null}
+
+          {openEditorError ? (
+            <span className="text-[11px] text-destructive">{openEditorError}</span>
+          ) : null}
+
+          {ensureState.status === "error" ? (
+            <span className="text-[11px] text-destructive">{ensureState.message}</span>
+          ) : null}
+        </div>
+      }
+      control={
+        <div className="flex flex-col gap-2">
+          {fileExists ? (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={!settingsPath || isOpeningEditor}
+              onClick={() =>
+                openInPreferredEditor(
+                  "claudeMcps",
+                  settingsPath,
+                  "Nao foi possivel abrir o ficheiro de MCPs.",
+                )
+              }
+            >
+              {isOpeningEditor ? "A abrir..." : "Abrir no editor"}
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={isCreating || isLoading}
+              onClick={handleCreate}
+            >
+              {isCreating ? (
+                <>
+                  <LoaderIcon className="size-3 animate-spin" />
+                  A criar...
+                </>
+              ) : (
+                <>
+                  <FilePlusIcon className="size-3" />
+                  Criar a partir de template
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
 export function useSettingsRestore(onRestored?: () => void) {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
@@ -523,10 +686,14 @@ export function GeneralSettingsPanel() {
   const [openingPathByTarget, setOpeningPathByTarget] = useState({
     keybindings: false,
     logsDirectory: false,
+    claudeMcps: false,
   });
   const [openPathErrorByTarget, setOpenPathErrorByTarget] = useState<
-    Partial<Record<"keybindings" | "logsDirectory", string | null>>
+    Partial<Record<"keybindings" | "logsDirectory" | "claudeMcps", string | null>>
   >({});
+  const allProjects = useStore(useShallow(selectProjectsAcrossEnvironments));
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const selectedProject = allProjects.find((p) => p.id === selectedProjectId) ?? allProjects[0] ?? null;
   const [openProviderDetails, setOpenProviderDetails] = useState<Record<ProviderKind, boolean>>({
     codex: Boolean(
       settings.providers.codex.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.codex.binaryPath ||
@@ -622,7 +789,7 @@ export function GeneralSettingsPanel() {
   );
 
   const openInPreferredEditor = useCallback(
-    (target: "keybindings" | "logsDirectory", path: string | null, failureMessage: string) => {
+    (target: "keybindings" | "logsDirectory" | "claudeMcps", path: string | null, failureMessage: string) => {
       if (!path) return;
       setOpenPathErrorByTarget((existing) => ({ ...existing, [target]: null }));
       setOpeningPathByTarget((existing) => ({ ...existing, [target]: true }));
@@ -662,8 +829,10 @@ export function GeneralSettingsPanel() {
 
   const openKeybindingsError = openPathErrorByTarget.keybindings ?? null;
   const openDiagnosticsError = openPathErrorByTarget.logsDirectory ?? null;
+  const openMcpsError = openPathErrorByTarget.claudeMcps ?? null;
   const isOpeningKeybindings = openingPathByTarget.keybindings;
   const isOpeningLogsDirectory = openingPathByTarget.logsDirectory;
+  const isOpeningMcpsEditor = openingPathByTarget.claudeMcps;
 
   const addCustomModel = useCallback(
     (provider: ProviderKind) => {
@@ -1613,6 +1782,45 @@ export function GeneralSettingsPanel() {
             </Button>
           }
         />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Claude MCPs (por projecto)"
+        headerAction={
+          allProjects.length > 1 ? (
+            <Select
+              value={selectedProject?.id ?? ""}
+              onValueChange={(value) => setSelectedProjectId(value)}
+            >
+              <SelectTrigger className="h-6 w-full max-w-56 text-[11px]" aria-label="Projecto">
+                <SelectValue>{selectedProject?.name ?? "Seleccionar projecto"}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {allProjects.map((project) => (
+                  <SelectItem hideIndicator key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          ) : null
+        }
+      >
+        {selectedProject ? (
+          <ClaudeProjectMcpsSection
+            key={selectedProject.id}
+            workspaceRoot={selectedProject.cwd}
+            openInPreferredEditor={openInPreferredEditor}
+            isOpeningEditor={isOpeningMcpsEditor}
+            openEditorError={openMcpsError}
+          />
+        ) : (
+          <div className="px-4 py-4 sm:px-5">
+            <p className="text-sm text-muted-foreground">
+              Sem projecto activo - MCPs per-project requerem workspace aberto.
+            </p>
+          </div>
+        )}
       </SettingsSection>
 
       <SettingsSection title="About">
