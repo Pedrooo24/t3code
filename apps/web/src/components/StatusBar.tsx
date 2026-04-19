@@ -1,16 +1,17 @@
 import { AlertTriangle } from "lucide-react";
 import { useRateLimits, type NormalizedRateLimit } from "../hooks/useRateLimits";
+import { strings } from "../strings";
 
 function formatReset(resetsAt: number | null): string {
   if (!resetsAt) return "";
   const now = Date.now();
   const ms = resetsAt * 1000 - now;
-  if (ms <= 0) return "reset pending";
+  if (ms <= 0) return strings.status.resetPending;
   const mins = Math.floor(ms / 60000);
-  if (mins < 60) return `resets in ${mins}m`;
+  if (mins < 60) return strings.status.resetsInMinutes(mins);
   const hours = Math.floor(mins / 60);
   const remMins = mins % 60;
-  return `resets in ${hours}h ${remMins}m`;
+  return strings.status.resetsInHours(hours, remMins);
 }
 
 function pctColor(pct: number | null): string {

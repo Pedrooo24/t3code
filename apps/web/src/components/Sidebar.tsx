@@ -179,15 +179,16 @@ import {
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
+import { strings } from "../strings";
 const THREAD_PREVIEW_LIMIT = 6;
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
-  updated_at: "Last user message",
-  created_at: "Created at",
-  manual: "Manual",
+  updated_at: strings.sidebar.sortByLastMessage,
+  created_at: strings.sidebar.sortByCreatedAt,
+  manual: strings.sidebar.sortManual,
 };
 const SIDEBAR_THREAD_SORT_LABELS: Record<SidebarThreadSortOrder, string> = {
-  updated_at: "Last user message",
-  created_at: "Created at",
+  updated_at: strings.sidebar.sortByLastMessage,
+  created_at: strings.sidebar.sortByCreatedAt,
 };
 const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
@@ -195,9 +196,9 @@ const SIDEBAR_LIST_ANIMATION_OPTIONS = {
 } as const;
 const EMPTY_THREAD_JUMP_LABELS = new Map<string, string>();
 const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> = {
-  repository: "Group by repository",
-  repository_path: "Group by repository path",
-  separate: "Keep separate",
+  repository: strings.sidebar.groupByRepository,
+  repository_path: strings.sidebar.groupByRepositoryPath,
+  separate: strings.sidebar.keepSeparate,
 };
 
 function threadJumpLabelMapsEqual(

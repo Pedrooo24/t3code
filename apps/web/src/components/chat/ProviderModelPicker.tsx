@@ -1,4 +1,5 @@
 import { type ProviderKind, type ServerProvider } from "@t3tools/contracts";
+import { strings } from "~/strings";
 import { resolveSelectableModel } from "@t3tools/shared/model";
 import { memo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
@@ -155,10 +156,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 : undefined;
               if (liveProvider && liveProvider.status !== "ready") {
                 const unavailableLabel = !liveProvider.enabled
-                  ? "Disabled"
+                  ? strings.providers.disabled
                   : !liveProvider.installed
-                    ? "Not installed"
-                    : "Unavailable";
+                    ? strings.providers.notInstalled
+                    : strings.providers.unavailable;
                 return (
                   <MenuItem key={option.value} disabled>
                     <OptionIcon
@@ -219,7 +220,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                   />
                   <span>{option.label}</span>
                   <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
-                    Coming soon
+                    {strings.providers.comingSoon}
                   </span>
                 </MenuItem>
               );
@@ -232,7 +233,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                   <OptionIcon aria-hidden="true" className="size-4 shrink-0 opacity-80" />
                   <span>{option.label}</span>
                   <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
-                    Coming soon
+                    {strings.providers.comingSoon}
                   </span>
                 </MenuItem>
               );

@@ -103,6 +103,7 @@ import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
+import { strings } from "~/strings";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
@@ -111,18 +112,18 @@ const runtimeModeConfig: Record<
   { label: string; description: string; icon: LucideIcon }
 > = {
   "approval-required": {
-    label: "Supervised",
-    description: "Ask before commands and file changes.",
+    label: strings.composer.supervised,
+    description: strings.composer.supervisedDescription,
     icon: LockIcon,
   },
   "auto-accept-edits": {
-    label: "Auto-accept edits",
-    description: "Auto-approve edits, ask before other actions.",
+    label: strings.composer.autoAcceptEdits,
+    description: strings.composer.autoAcceptEditsDescription,
     icon: PenLineIcon,
   },
   "full-access": {
-    label: "Full access",
-    description: "Allow commands and edits without prompts.",
+    label: strings.composer.fullAccess,
+    description: strings.composer.fullAccessDescription,
     icon: LockOpenIcon,
   },
 };
@@ -187,13 +188,13 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
             onClick={props.onToggleInteractionMode}
             title={
               props.interactionMode === "plan"
-                ? "Plan mode — click to return to normal build mode"
-                : "Default mode — click to enter plan mode"
+                ? strings.composer.planModeTitle
+                : strings.composer.buildModeTitle
             }
           >
             <BotIcon />
             <span className="sr-only sm:not-sr-only">
-              {props.interactionMode === "plan" ? "Plan" : "Build"}
+              {props.interactionMode === "plan" ? strings.composer.planMode : strings.composer.buildMode}
             </span>
           </Button>
 
@@ -290,7 +291,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
     <>
       {props.activeContextWindow ? <ContextWindowMeter usage={props.activeContextWindow} /> : null}
       {props.isPreparingWorktree ? (
-        <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
+        <span className="text-muted-foreground/70 text-xs">{strings.composer.preparingWorktree}</span>
       ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
@@ -1889,12 +1890,12 @@ export const ChatComposer = memo(
                   isComposerApprovalState
                     ? (activePendingApproval?.detail ?? "Resolve this approval request to continue")
                     : activePendingProgress
-                      ? "Type your own answer, or leave this blank to use the selected option"
+                      ? strings.composer.placeholderPendingAnswer
                       : showPlanFollowUpPrompt && activeProposedPlan
-                        ? "Add feedback to refine the plan, or leave this blank to implement it"
+                        ? strings.composer.placeholderPlanRefine
                         : phase === "disconnected"
-                          ? "Ask for follow-up changes or attach images"
-                          : "Ask anything, @tag files/folders, or use / to show available commands"
+                          ? strings.composer.placeholderDisconnected
+                          : strings.composer.placeholderDefault
                 }
                 disabled={isConnecting || isComposerApprovalState}
               />
