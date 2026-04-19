@@ -45,6 +45,7 @@ import {
   observeRpcStreamEffect,
 } from "./observability/RpcInstrumentation.ts";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
+import { ProviderService } from "./provider/Services/ProviderService.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
@@ -143,6 +144,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const gitStatusBroadcaster = yield* GitStatusBroadcaster;
       const terminalManager = yield* TerminalManager;
       const providerRegistry = yield* ProviderRegistry;
+      const providerService = yield* ProviderService;
       const config = yield* ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents;
       const serverSettings = yield* ServerSettingsService;
@@ -1051,6 +1053,19 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   payload: { settings },
                 })),
               );
+              const rateLimitsUpdates = providerService.streamEvents.pipe(
+                Stream.filterMap((event) => {
+                  if (event.type !== "account.rate-limits.updated") return Option.none();
+                  const info = event.payload.rateLimits.rate_limit_info;
+                  const rateLimitType = info.rateLimitType;
+                  if (!rateLimitType) return Option.none();
+                  return Option.some({
+                    version: 1 as const,
+                    type: "rateLimitsUpdated" as const,
+                    payload: { rateLimitType, info },
+                  });
+                }),
+              );
 
               yield* Effect.all(
                 [providerRegistry.refresh("codex"), providerRegistry.refresh("claudeAgent")],
@@ -1062,7 +1077,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
 
               const liveUpdates = Stream.merge(
                 keybindingsUpdates,
-                Stream.merge(providerStatuses, settingsUpdates),
+                Stream.merge(providerStatuses, Stream.merge(settingsUpdates, rateLimitsUpdates)),
               );
 
               return Stream.concat(
