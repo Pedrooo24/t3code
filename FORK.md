@@ -35,8 +35,11 @@ Total: **13 commits** de cherry-pick preservando autoria (`-x`).
 
 - `main` tracks `origin/main` (fork), recebe rebase de `upstream/main`. Nunca se trabalha aqui.
 - `pedro/dev` — branch de trabalho, todas as features.
-- Build: `bun run build` (Turborepo, 6 tasks, ~20s cold / 1.7s warm).
-- Dev: `bun run dev` (Electron + Vite).
+- Build web + server: `bun run build` (Turborepo, 6 tasks, ~25s cold).
+- Build desktop (Electron): `bun run build:desktop`.
+- Dev web (browser, só para debug rápido): `bun run dev`.
+- **Dev desktop (alvo primário — Electron + web + server em paralelo): `bun run dev:desktop`**.
+- Start desktop empacotado: `bun run start:desktop`.
 
 Baseline fechada: **2026-04-19**.
 
