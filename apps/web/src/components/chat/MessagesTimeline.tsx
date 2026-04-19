@@ -18,7 +18,11 @@ import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
   CheckIcon,
+  ChevronDown,
+  ChevronRight,
   CircleAlertIcon,
+  Copy,
+  Check,
   EyeIcon,
   GlobeIcon,
   HammerIcon,
@@ -958,6 +962,16 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
         >
           <EntryIcon className="size-3" />
         </span>
+        {workEntry.toolKind === "mcp" && (
+          <span className="shrink-0 rounded border border-sky-500/40 bg-sky-500/10 px-1 text-[9px] font-medium uppercase tracking-wide text-sky-600 dark:text-sky-300">
+            MCP
+          </span>
+        )}
+        {workEntry.toolKind === "agent" && (
+          <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1 text-[9px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-300">
+            AGENT
+          </span>
+        )}
         <div className="min-w-0 flex-1 overflow-hidden">
           {rawCommand ? (
             <div className="max-w-full">

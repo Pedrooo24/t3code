@@ -50,6 +50,7 @@ export interface WorkLogEntry {
   toolTitle?: string;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
+  toolKind?: "mcp" | "agent" | "native";
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -558,6 +559,12 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   };
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);
+  let toolKind: "mcp" | "agent" | "native" | undefined;
+  if (itemType === "mcp_tool_call") toolKind = "mcp";
+  else if (itemType === "collab_agent_tool_call" || itemType === "dynamic_tool_call")
+    toolKind = "agent";
+  else if (itemType === "command_execution" || itemType === "file_change") toolKind = "native";
+  if (toolKind) entry.toolKind = toolKind;
   if (detail) {
     entry.detail = detail;
   }
