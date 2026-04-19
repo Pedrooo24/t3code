@@ -51,6 +51,7 @@ export interface WorkLogEntry {
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
   toolKind?: "mcp" | "agent" | "native";
+  rawPayload?: unknown;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -592,6 +593,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const collapseKey = deriveToolLifecycleCollapseKey(entry);
   if (collapseKey) {
     entry.collapseKey = collapseKey;
+  }
+  if (entry.tone === "tool" && payload) {
+    entry.rawPayload = payload;
   }
   return entry;
 }

@@ -21,8 +21,6 @@ import {
   ChevronDown,
   ChevronRight,
   CircleAlertIcon,
-  Copy,
-  Check,
   EyeIcon,
   GlobeIcon,
   HammerIcon,
@@ -49,6 +47,7 @@ import {
   type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
 import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
+import { ToolCallDetail } from "./ToolCallDetail";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   deriveDisplayedUserMessageState,
@@ -982,6 +981,8 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workspaceRoot: string | undefined;
 }) {
   const { workEntry, workspaceRoot } = props;
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const hasRawPayload = workEntry.rawPayload != null;
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
@@ -1082,7 +1083,22 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
             </Tooltip>
           )}
         </div>
+        {hasRawPayload && (
+          <button
+            type="button"
+            onClick={() => setIsDetailOpen((v) => !v)}
+            className="shrink-0 text-muted-foreground/40 hover:text-foreground/70"
+            aria-label={isDetailOpen ? "Hide raw payload" : "Show raw payload"}
+          >
+            {isDetailOpen ? (
+              <ChevronDown className="size-3" />
+            ) : (
+              <ChevronRight className="size-3" />
+            )}
+          </button>
+        )}
       </div>
+      {hasRawPayload && isDetailOpen && <ToolCallDetail payload={workEntry.rawPayload} />}
       {hasChangedFiles && !previewIsChangedFiles && (
         <div className="mt-1 flex flex-wrap gap-1 pl-6">
           {workEntry.changedFiles?.slice(0, 4).map((filePath) => {
