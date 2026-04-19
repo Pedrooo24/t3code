@@ -92,7 +92,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<ProviderKind, string> = {
   opencode: "openai/gpt-5",
 };
 
-export const DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.codex;
+export const DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.claudeAgent;
 
 /** Per-provider text generation model defaults. */
 export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER: Record<ProviderKind, string> = {

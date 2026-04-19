@@ -754,10 +754,12 @@ export function GeneralSettingsPanel() {
   const availableEditors = useServerAvailableEditors();
   const observability = useServerObservability();
   const serverProviders = useServerProviders();
+  const codexUiEnabled = import.meta.env.VITE_ENABLE_CODEX === "1";
   const visibleProviderSettings = PROVIDER_SETTINGS.filter(
     (providerSettings) =>
-      providerSettings.provider !== "cursor" ||
-      serverProviders.some((provider) => provider.provider === "cursor"),
+      (providerSettings.provider !== "cursor" ||
+        serverProviders.some((provider) => provider.provider === "cursor")) &&
+      (providerSettings.provider !== "codex" || codexUiEnabled),
   );
   const codexHomePath = settings.providers.codex.homePath;
   const logsDirectoryPath = observability?.logsDirectoryPath ?? null;

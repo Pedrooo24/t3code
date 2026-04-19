@@ -24,12 +24,15 @@ import type {
 
 export type ProviderPickerKind = ProviderKind;
 
+// ENABLE_CODEX=1 reveals Codex in the provider picker. Default: hidden.
+const _CODEX_UI_ENABLED = import.meta.env.VITE_ENABLE_CODEX === "1";
+
 export const PROVIDER_OPTIONS: Array<{
   value: ProviderPickerKind;
   label: string;
   available: boolean;
 }> = [
-  { value: "codex", label: "Codex", available: true },
+  ...(_CODEX_UI_ENABLED ? [{ value: "codex" as const, label: "Codex", available: true }] : []),
   { value: "claudeAgent", label: "Claude", available: true },
   { value: "opencode", label: "OpenCode", available: true },
   { value: "cursor", label: "Cursor", available: true },

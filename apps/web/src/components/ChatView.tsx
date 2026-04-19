@@ -776,8 +776,8 @@ export default function ChatView(props: ChatViewProps) {
             threadId,
             draftThread,
             fallbackDraftProject?.defaultModelSelection ?? {
-              provider: "codex",
-              model: DEFAULT_MODEL_BY_PROVIDER.codex,
+              provider: "claudeAgent",
+              model: DEFAULT_MODEL_BY_PROVIDER.claudeAgent,
             },
             localDraftError,
           )
@@ -2555,7 +2555,7 @@ export default function ChatView(props: ChatViewProps) {
         ctxSelectedProvider,
         ctxSelectedModel ||
           activeProject.defaultModelSelection?.model ||
-          DEFAULT_MODEL_BY_PROVIDER.codex,
+          DEFAULT_MODEL_BY_PROVIDER.claudeAgent,
         ctxSelectedModelSelection.options,
       );
 

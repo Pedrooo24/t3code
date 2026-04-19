@@ -361,7 +361,10 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     DEFAULT_CODEX_MODEL_CAPABILITIES,
   );
 
-  if (!codexSettings.enabled) {
+  // Feature flag: ENABLE_CODEX=1 activates Codex probe. Default off.
+  const codexEnabled = process.env.ENABLE_CODEX === "1";
+
+  if (!codexSettings.enabled || !codexEnabled) {
     return buildServerProvider({
       provider: PROVIDER,
       enabled: false,
@@ -372,7 +375,9 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Codex is disabled in T3 Code settings.",
+        message: !codexEnabled
+          ? "Codex is disabled (ENABLE_CODEX not set)."
+          : "Codex is disabled in T3 Code settings.",
       },
     });
   }
