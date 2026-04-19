@@ -22,6 +22,8 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
   readonly remainingTokens: number | null;
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
+  readonly estimatedCostUsd: number | null;
+  readonly lastTurnCostUsd: number | null;
   readonly updatedAt: string;
 };
 
@@ -66,6 +68,8 @@ export function deriveLatestContextWindowSnapshot(
       toolUses: asFiniteNumber(payload?.toolUses),
       durationMs: asFiniteNumber(payload?.durationMs),
       compactsAutomatically: asBoolean(payload?.compactsAutomatically) ?? false,
+      estimatedCostUsd: asFiniteNumber(payload?.estimatedCostUsd),
+      lastTurnCostUsd: asFiniteNumber(payload?.lastTurnCostUsd),
       updatedAt: activity.createdAt,
     };
   }

@@ -2,6 +2,10 @@ import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 
+function formatCost(v: number | null): string | null {
+  return v == null ? null : `$${v.toFixed(2)}`;
+}
+
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
     return null;
@@ -105,6 +109,16 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
           {usage.compactsAutomatically ? (
             <div className="text-xs text-muted-foreground">
               Automatically compacts its context when needed.
+            </div>
+          ) : null}
+          {formatCost(usage.estimatedCostUsd) !== null ? (
+            <div className="text-xs text-foreground">
+              {formatCost(usage.estimatedCostUsd)}
+              {formatCost(usage.lastTurnCostUsd) !== null ? (
+                <span className="ml-1 text-muted-foreground">
+                  (last: {formatCost(usage.lastTurnCostUsd)})
+                </span>
+              ) : null}
             </div>
           ) : null}
         </div>
