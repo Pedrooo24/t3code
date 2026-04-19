@@ -285,6 +285,7 @@ function mapThreadShell(
     environmentId,
     projectId: thread.projectId,
     title: thread.title,
+    modelSelection: normalizeModelSelection(thread.modelSelection),
     interactionMode: thread.interactionMode,
     session,
     createdAt: thread.createdAt,

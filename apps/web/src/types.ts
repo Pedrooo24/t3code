@@ -143,6 +143,7 @@ export interface SidebarThreadSummary {
   environmentId: EnvironmentId;
   projectId: ProjectId;
   title: string;
+  modelSelection: ModelSelection;
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;
   createdAt: string;

@@ -17,6 +17,7 @@ import {
   terminalStatusFromRunningIds,
   ThreadStatusLabel,
 } from "./ThreadStatusIndicators";
+import { ModelBadge } from "./chat/ModelBadge";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
@@ -604,6 +605,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               </TooltipPopup>
             </Tooltip>
           )}
+          <ModelBadge selection={thread.modelSelection} size="xs" className="shrink-0" />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {terminalStatus && (
