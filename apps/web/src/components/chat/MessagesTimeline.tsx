@@ -564,13 +564,17 @@ const WorkGroupSection = memo(function WorkGroupSection({
         </div>
       )}
       <div className="space-y-0.5">
-        {visibleEntries.map((workEntry) => (
-          <SimpleWorkEntryRow
-            key={`work-row:${workEntry.id}`}
-            workEntry={workEntry}
-            workspaceRoot={workspaceRoot}
-          />
-        ))}
+        {visibleEntries.map((workEntry) =>
+          workEntry.tone === "thinking" ? (
+            <ThinkingBlock key={`work-row:${workEntry.id}`} entry={workEntry} />
+          ) : (
+            <SimpleWorkEntryRow
+              key={`work-row:${workEntry.id}`}
+              workEntry={workEntry}
+              workspaceRoot={workspaceRoot}
+            />
+          ),
+        )}
       </div>
     </div>
   );
@@ -933,6 +937,45 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
   }
   return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
 }
+
+const ThinkingBlock = memo(function ThinkingBlock({ entry }: { entry: TimelineWorkEntry }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const content = entry.detail ?? entry.label ?? "";
+  const hasMore = content.split("\n").length > 2 || content.length > 180;
+  return (
+    <div className="rounded-md border border-border/40 bg-muted/15 px-2 py-1.5">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground/55">
+          Thinking
+        </span>
+        {hasMore && (
+          <button
+            type="button"
+            className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 hover:text-foreground/75"
+            onClick={() => setIsExpanded((v) => !v)}
+          >
+            {isExpanded ? "Collapse" : "Expand"}
+          </button>
+        )}
+      </div>
+      <p
+        className={cn("whitespace-pre-wrap text-[11px] leading-5 text-muted-foreground/70")}
+        style={
+          !isExpanded
+            ? {
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }
+            : undefined
+        }
+      >
+        {content}
+      </p>
+    </div>
+  );
+});
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
