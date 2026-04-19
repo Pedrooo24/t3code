@@ -39,7 +39,11 @@ const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
 
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
 const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
-const COMING_SOON_PROVIDER_OPTIONS = [{ id: "gemini", label: "Gemini", icon: Gemini }] as const;
+// ENABLE_GEMINI=1 reveals Gemini in the coming-soon list. Default: hidden.
+const _GEMINI_UI_ENABLED = import.meta.env.VITE_ENABLE_GEMINI === "1";
+const COMING_SOON_PROVIDER_OPTIONS = _GEMINI_UI_ENABLED
+  ? ([{ id: "gemini", label: "Gemini", icon: Gemini }] as const)
+  : ([] as const);
 
 function providerIconClassName(
   provider: ProviderKind | ProviderPickerKind,

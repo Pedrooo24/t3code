@@ -26,6 +26,10 @@ export type ProviderPickerKind = ProviderKind;
 
 // ENABLE_CODEX=1 reveals Codex in the provider picker. Default: hidden.
 const _CODEX_UI_ENABLED = import.meta.env.VITE_ENABLE_CODEX === "1";
+// ENABLE_CURSOR=1 reveals Cursor in the provider picker. Default: hidden.
+const _CURSOR_UI_ENABLED = import.meta.env.VITE_ENABLE_CURSOR === "1";
+// ENABLE_OPENCODE=1 reveals OpenCode in the provider picker. Default: hidden.
+const _OPENCODE_UI_ENABLED = import.meta.env.VITE_ENABLE_OPENCODE === "1";
 
 export const PROVIDER_OPTIONS: Array<{
   value: ProviderPickerKind;
@@ -34,8 +38,8 @@ export const PROVIDER_OPTIONS: Array<{
 }> = [
   ...(_CODEX_UI_ENABLED ? [{ value: "codex" as const, label: "Codex", available: true }] : []),
   { value: "claudeAgent", label: "Claude", available: true },
-  { value: "opencode", label: "OpenCode", available: true },
-  { value: "cursor", label: "Cursor", available: true },
+  ...(_OPENCODE_UI_ENABLED ? [{ value: "opencode" as const, label: "OpenCode", available: true }] : []),
+  ...(_CURSOR_UI_ENABLED ? [{ value: "cursor" as const, label: "Cursor", available: true }] : []),
 ];
 
 export interface WorkLogEntry {
