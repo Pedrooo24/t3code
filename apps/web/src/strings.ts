@@ -107,6 +107,9 @@ export const strings = {
     resetPending: "a reiniciar",
     resetsInMinutes: (mins: number) => `reinicia em ${mins}m`,
     resetsInHours: (hours: number, mins: number) => `reinicia em ${hours}h ${mins}m`,
+    session: "Sessão",
+    noData: "--",
+    noDataTooltip: "sem dados - aguardar primeiro evento de rate-limit do SDK",
   },
 
   providers: {

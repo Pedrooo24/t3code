@@ -25,6 +25,7 @@ export function useRateLimits(): {
   fiveHour: NormalizedRateLimit | null;
   sevenDay: NormalizedRateLimit | null;
   hasAny: boolean;
+  hasEverReceivedData: boolean;
 } {
   const all = useAtomValue(rateLimitsAtom);
 
@@ -44,6 +45,9 @@ export function useRateLimits(): {
 
   const fiveHour = pick("five_hour");
   const sevenDay = pick("seven_day") ?? pick("seven_day_opus") ?? pick("seven_day_sonnet");
+  const hasAny = Boolean(fiveHour || sevenDay);
+  // hasEverReceivedData: true when the atom has at least one key (even if utilization is 0)
+  const hasEverReceivedData = Object.keys(all).length > 0;
 
-  return { fiveHour, sevenDay, hasAny: Boolean(fiveHour || sevenDay) };
+  return { fiveHour, sevenDay, hasAny, hasEverReceivedData };
 }
