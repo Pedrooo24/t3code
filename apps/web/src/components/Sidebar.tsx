@@ -69,6 +69,7 @@ import {
   selectSidebarThreadsForProjectRefs,
   selectSidebarThreadsAcrossEnvironments,
   selectThreadByRef,
+  selectEnvironmentState,
   useStore,
 } from "../store";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
@@ -271,6 +272,90 @@ function buildThreadJumpLabelMap(input: {
   return mapping.size > 0 ? mapping : EMPTY_THREAD_JUMP_LABELS;
 }
 
+// Kinds que sao ruido de sistema e nao devem aparecer como preview
+const SYSTEM_ACTIVITY_KINDS = new Set([
+  "task.started",
+  "context-window.updated",
+]);
+
+function isSystemActivityKind(kind: string): boolean {
+  if (SYSTEM_ACTIVITY_KINDS.has(kind)) return true;
+  if (kind.startsWith("system.")) return true;
+  return false;
+}
+
+// Remove paths absolutos para nao vazar informacao sensivel no preview
+function sanitizeActivityText(text: string): string {
+  return text
+    .replace(/[A-Za-z]:\\[^\s]+/g, "[path]")
+    .replace(/\/[^\s]{2,}/g, "[path]")
+    .trim();
+}
+
+const SUBAGENT_ITEM_TYPES_SIDEBAR = new Set(["collab_agent_tool_call", "dynamic_tool_call"]);
+
+function countRunningSubagentsSidebar(
+  activities: ReadonlyArray<import("@t3tools/contracts").OrchestrationThreadActivity>,
+): number {
+  const started = activities.filter((a) => {
+    if (a.kind !== "tool.started") return false;
+    const p = a.payload as Record<string, unknown> | null | undefined;
+    const t = (p?.itemType as string | undefined) ?? "";
+    return SUBAGENT_ITEM_TYPES_SIDEBAR.has(t);
+  });
+  if (started.length === 0) return 0;
+
+  const completedByCallId = new Map<string, number>();
+  const completedOrdinalByType: Record<string, number> = {};
+
+  for (const a of activities) {
+    const isCompleted =
+      (a.kind === "tool.completed" || a.kind === "tool.updated") &&
+      SUBAGENT_ITEM_TYPES_SIDEBAR.has(
+        ((a.payload as Record<string, unknown> | null | undefined)?.itemType as string | undefined) ?? "",
+      );
+    if (!isCompleted) continue;
+    const p = a.payload as Record<string, unknown> | null | undefined;
+    const data = p?.data as Record<string, unknown> | null | undefined;
+    const callId = typeof data?.toolCallId === "string" ? data.toolCallId : null;
+    if (callId) {
+      completedByCallId.set(callId, (completedByCallId.get(callId) ?? 0) + 1);
+    } else {
+      const t = ((a.payload as Record<string, unknown> | null | undefined)?.itemType as string | undefined) ?? "";
+      completedOrdinalByType[t] = (completedOrdinalByType[t] ?? 0) + 1;
+    }
+  }
+
+  const consumedOrdinalByType: Record<string, number> = {};
+  let running = 0;
+
+  for (const a of started) {
+    const p = a.payload as Record<string, unknown> | null | undefined;
+    const data = p?.data as Record<string, unknown> | null | undefined;
+    const callId = typeof data?.toolCallId === "string" ? data.toolCallId : null;
+    const itemType = ((a.payload as Record<string, unknown> | null | undefined)?.itemType as string | undefined) ?? "";
+
+    if (callId) {
+      const remaining = completedByCallId.get(callId) ?? 0;
+      if (remaining > 0) {
+        completedByCallId.set(callId, remaining - 1);
+      } else {
+        running++;
+      }
+    } else {
+      const consumed = consumedOrdinalByType[itemType] ?? 0;
+      const available = completedOrdinalByType[itemType] ?? 0;
+      if (consumed < available) {
+        consumedOrdinalByType[itemType] = consumed + 1;
+      } else {
+        running++;
+      }
+    }
+  }
+
+  return running;
+}
+
 interface SidebarThreadRowProps {
   thread: SidebarThreadSummary;
   projectCwd: string | null;
@@ -335,6 +420,35 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
+
+  // Activities para preview de ultima actividade e contador de subagentes
+  const threadActivities = useStore(
+    useMemo(
+      () => (state: import("../store").AppState) => {
+        const envState = selectEnvironmentState(state, thread.environmentId);
+        const ids = envState.activityIdsByThreadId[thread.id] ?? [];
+        const byId = envState.activityByThreadId[thread.id] ?? {};
+        return ids.map((id) => byId[id]).filter(Boolean) as import("@t3tools/contracts").OrchestrationThreadActivity[];
+      },
+      [thread.environmentId, thread.id],
+    ),
+  );
+
+  const lastNonSystemActivity = useMemo(() => {
+    for (let i = threadActivities.length - 1; i >= 0; i--) {
+      const a = threadActivities[i];
+      if (a && !isSystemActivityKind(a.kind) && a.summary) {
+        return sanitizeActivityText(a.summary);
+      }
+    }
+    return null;
+  }, [threadActivities]);
+
+  const runningSubagentCount = useMemo(
+    () => countRunningSubagentsSidebar(threadActivities),
+    [threadActivities],
+  );
+
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
   const isSelected = useThreadSelectionStore((state) => state.selectedThreadKeys.has(threadKey));
   const hasSelection = useThreadSelectionStore((state) => state.selectedThreadKeys.size > 0);
@@ -560,53 +674,71 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         onKeyDown={handleRowKeyDown}
         onContextMenu={handleRowContextMenu}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-          {prStatus && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={prStatus.tooltip}
-                    className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
-                    onClick={handlePrClick}
-                  >
-                    <GitPullRequestIcon className="size-3" />
-                  </button>
-                }
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {prStatus && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={prStatus.tooltip}
+                      className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
+                      onClick={handlePrClick}
+                    >
+                      <GitPullRequestIcon className="size-3" />
+                    </button>
+                  }
+                />
+                <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
+              </Tooltip>
+            )}
+            {threadStatus && <ThreadStatusLabel status={threadStatus} />}
+            {renamingThreadKey === threadKey ? (
+              <input
+                ref={handleRenameInputRef}
+                className="min-w-0 flex-1 truncate text-xs bg-transparent outline-none border border-ring rounded px-0.5"
+                value={renamingTitle}
+                onChange={handleRenameInputChange}
+                onKeyDown={handleRenameInputKeyDown}
+                onBlur={handleRenameInputBlur}
+                onClick={handleRenameInputClick}
               />
-              <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
-            </Tooltip>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="min-w-0 flex-1 truncate text-xs"
+                      data-testid={`thread-title-${thread.id}`}
+                    >
+                      {thread.title}
+                    </span>
+                  }
+                />
+                <TooltipPopup side="top" className="max-w-80 whitespace-normal leading-tight">
+                  {thread.title}
+                </TooltipPopup>
+              </Tooltip>
+            )}
+            <ModelBadge selection={thread.modelSelection} size="xs" className="shrink-0" />
+          </div>
+          {(lastNonSystemActivity || runningSubagentCount > 0) && (
+            <div className="flex min-w-0 items-center gap-1.5">
+              {lastNonSystemActivity && (
+                <span className="min-w-0 flex-1 truncate text-[10px] opacity-60">
+                  {lastNonSystemActivity.length > 40
+                    ? `${lastNonSystemActivity.slice(0, 40)}...`
+                    : lastNonSystemActivity}
+                </span>
+              )}
+              {runningSubagentCount > 0 && (
+                <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                  {`\u26A1${runningSubagentCount}`}
+                </span>
+              )}
+            </div>
           )}
-          {threadStatus && <ThreadStatusLabel status={threadStatus} />}
-          {renamingThreadKey === threadKey ? (
-            <input
-              ref={handleRenameInputRef}
-              className="min-w-0 flex-1 truncate text-xs bg-transparent outline-none border border-ring rounded px-0.5"
-              value={renamingTitle}
-              onChange={handleRenameInputChange}
-              onKeyDown={handleRenameInputKeyDown}
-              onBlur={handleRenameInputBlur}
-              onClick={handleRenameInputClick}
-            />
-          ) : (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    className="min-w-0 flex-1 truncate text-xs"
-                    data-testid={`thread-title-${thread.id}`}
-                  >
-                    {thread.title}
-                  </span>
-                }
-              />
-              <TooltipPopup side="top" className="max-w-80 whitespace-normal leading-tight">
-                {thread.title}
-              </TooltipPopup>
-            </Tooltip>
-          )}
-          <ModelBadge selection={thread.modelSelection} size="xs" className="shrink-0" />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {terminalStatus && (

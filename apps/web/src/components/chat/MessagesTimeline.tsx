@@ -24,6 +24,7 @@ import {
   EyeIcon,
   GlobeIcon,
   HammerIcon,
+  Loader2,
   type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -1083,6 +1084,11 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
             </Tooltip>
           )}
         </div>
+        {workEntry.isRunning && !workEntry.isStalled && (
+          <span aria-hidden className="shrink-0 text-teal-600 dark:text-teal-400">
+            <Loader2 className="size-3 animate-spin" />
+          </span>
+        )}
         {hasRawPayload && (
           <button
             type="button"

@@ -101,6 +101,21 @@ export const strings = {
     projectsCount: (n: number) => `${n} projectos`,
   },
 
+  subagents: {
+    title: "Subagentes",
+    activos: "activos",
+    concluidos: "concluidos",
+    herdado: "herdado",
+    modelo: "modelo",
+    effort: "effort",
+    output: "output",
+    copiar: "copiar",
+    expandir: "expandir",
+    colapsar: "colapsar",
+    ultimaTool: "ultima tool",
+    stalled: "stalled",
+  },
+
   status: {
     rateLimitLabel5h: "5h",
     rateLimitLabel7d: "7d",
