@@ -15,7 +15,7 @@ import { DiffIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
-import { ModelBadge } from "./ModelBadge";
+import { ModelBadge, type ModelBadgeState } from "./ModelBadge";
 import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
@@ -26,6 +26,7 @@ interface ChatHeaderProps {
   draftId?: DraftId;
   activeThreadTitle: string;
   activeThreadModelSelection?: ModelSelection | null;
+  modelBadgeState?: ModelBadgeState;
   activeProjectName: string | undefined;
   isGitRepo: boolean;
   openInCwd: string | null;
@@ -53,6 +54,7 @@ export const ChatHeader = memo(function ChatHeader({
   draftId,
   activeThreadTitle,
   activeThreadModelSelection,
+  modelBadgeState = "idle",
   activeProjectName,
   isGitRepo,
   openInCwd,
@@ -83,7 +85,7 @@ export const ChatHeader = memo(function ChatHeader({
         >
           {activeThreadTitle}
         </h2>
-        <ModelBadge selection={activeThreadModelSelection} />
+        <ModelBadge selection={activeThreadModelSelection} state={modelBadgeState} />
         {activeProjectName && (
           <Badge variant="outline" className="min-w-0 shrink overflow-hidden">
             <span className="min-w-0 truncate">{activeProjectName}</span>

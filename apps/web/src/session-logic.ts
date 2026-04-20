@@ -42,6 +42,14 @@ export const PROVIDER_OPTIONS: Array<{
   ...(_CURSOR_UI_ENABLED ? [{ value: "cursor" as const, label: "Cursor", available: true }] : []),
 ];
 
+// VITE_ENABLE_REASONING_STREAM=true streams reasoning deltas inline.
+// Set to "false" to fall back to consolidated ThinkingBlock only.
+export const REASONING_STREAM_ENABLED =
+  import.meta.env.VITE_ENABLE_REASONING_STREAM !== "false";
+
+/** Tools running for more than this many ms without completion are marked stalled. */
+const TOOL_STALLED_THRESHOLD_MS = 10 * 60 * 1000;
+
 export interface WorkLogEntry {
   id: string;
   createdAt: string;
@@ -56,12 +64,18 @@ export interface WorkLogEntry {
   requestKind?: PendingApproval["requestKind"];
   toolKind?: "mcp" | "agent" | "native";
   rawPayload?: unknown;
+  /** True when a tool has started but not yet completed (spinner shown). */
+  isRunning?: boolean;
+  /** True when isRunning has exceeded the stalled threshold (~10 min). */
+  isStalled?: boolean;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
   activityKind: OrchestrationThreadActivity["kind"];
   collapseKey?: string;
   toolCallId?: string;
+  isRunning?: boolean;
+  isStalled?: boolean;
 }
 
 export interface PendingApproval {
@@ -494,16 +508,28 @@ export function deriveWorkLogEntries(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
 ): WorkLogEntry[] {
+  const now = Date.now();
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
   const entries = ordered
     .filter((activity) => (latestTurnId ? activity.turnId === latestTurnId : true))
-    .filter((activity) => activity.kind !== "tool.started")
+    // tool.started is now included - displayed as isRunning spinner
     .filter((activity) => activity.kind !== "task.started")
     .filter((activity) => activity.kind !== "context-window.updated")
     .filter((activity) => activity.summary !== "Checkpoint captured")
     .filter((activity) => !isPlanBoundaryToolActivity(activity))
     .map(toDerivedWorkLogEntry);
-  return collapseDerivedWorkLogEntries(entries).map(
+  const collapsed = collapseDerivedWorkLogEntries(entries);
+  // Mark stalled: tool.started entries still running past threshold
+  for (const entry of collapsed) {
+    if (entry.isRunning) {
+      const startedMs = Date.parse(entry.createdAt);
+      if (!Number.isNaN(startedMs) && now - startedMs > TOOL_STALLED_THRESHOLD_MS) {
+        entry.isStalled = true;
+        entry.isRunning = false;
+      }
+    }
+  }
+  return collapsed.map(
     ({ activityKind: _activityKind, collapseKey: _collapseKey, ...entry }) => entry,
   );
 }
@@ -561,6 +587,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
           ? "info"
           : activity.tone,
     activityKind: activity.kind,
+    ...(activity.kind === "tool.started" ? { isRunning: true } : {}),
   };
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);
@@ -623,18 +650,35 @@ function shouldCollapseToolLifecycleEntries(
   previous: DerivedWorkLogEntry,
   next: DerivedWorkLogEntry,
 ): boolean {
-  if (previous.activityKind !== "tool.updated" && previous.activityKind !== "tool.completed") {
-    return false;
-  }
-  if (next.activityKind !== "tool.updated" && next.activityKind !== "tool.completed") {
-    return false;
-  }
-  if (previous.activityKind === "tool.completed") {
-    return false;
-  }
+  const prevIsToolLifecycle =
+    previous.activityKind === "tool.started" ||
+    previous.activityKind === "tool.updated" ||
+    previous.activityKind === "tool.completed";
+  const nextIsToolLifecycle =
+    next.activityKind === "tool.updated" || next.activityKind === "tool.completed";
+
+  if (!prevIsToolLifecycle || !nextIsToolLifecycle) return false;
+  // Do not collapse once previous is already completed
+  if (previous.activityKind === "tool.completed") return false;
+
+  // Collapse by explicit toolCallId match
+  if (previous.toolCallId !== undefined && previous.toolCallId === next.toolCallId) return true;
+
   if (previous.collapseKey !== undefined && previous.collapseKey === next.collapseKey) {
     return true;
   }
+
+  // tool.started -> tool.updated/completed: match by label + itemType
+  if (
+    previous.activityKind === "tool.started" &&
+    previous.itemType !== undefined &&
+    previous.itemType === next.itemType &&
+    normalizeCompactToolLabel(previous.toolTitle ?? previous.label) ===
+      normalizeCompactToolLabel(next.toolTitle ?? next.label)
+  ) {
+    return true;
+  }
+
   return (
     previous.toolCallId !== undefined &&
     next.toolCallId === undefined &&
@@ -657,9 +701,15 @@ function mergeDerivedWorkLogEntries(
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
   const toolCallId = next.toolCallId ?? previous.toolCallId;
+  // When merging a started entry with an updated/completed one, clear isRunning
+  const isRunning =
+    next.activityKind === "tool.completed" || next.activityKind === "tool.updated"
+      ? false
+      : (next.isRunning ?? previous.isRunning);
   return {
     ...previous,
     ...next,
+    isRunning,
     ...(detail ? { detail } : {}),
     ...(command ? { command } : {}),
     ...(rawCommand ? { rawCommand } : {}),
@@ -684,7 +734,11 @@ function mergeChangedFiles(
 }
 
 function deriveToolLifecycleCollapseKey(entry: DerivedWorkLogEntry): string | undefined {
-  if (entry.activityKind !== "tool.updated" && entry.activityKind !== "tool.completed") {
+  if (
+    entry.activityKind !== "tool.started" &&
+    entry.activityKind !== "tool.updated" &&
+    entry.activityKind !== "tool.completed"
+  ) {
     return undefined;
   }
   if (entry.toolCallId) {
