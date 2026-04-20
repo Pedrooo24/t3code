@@ -43,6 +43,18 @@ Total: **13 commits** de cherry-pick preservando autoria (`-x`).
 
 Baseline fechada: **2026-04-19**.
 
+## Palette policy
+
+Status indicators sao codigo visual de estado - uniformizar tudo a teal dilui a semantica de cada cor.
+
+- **teal** - primary/active/inProgress (substituiu blue em toda a UI)
+- **violet** - estados terminais de plano (Plan Ready, PR merged)
+- **emerald** - Completed/success
+- **amber** - pending/warning
+- **red** - error/destructive
+
+Racional: cada cor tem semantica propria. Misturar blue e teal para "coisas activas" cria ambiguidade desnecessaria - teal e o primary deste fork, blue nao existe.
+
 ## Feature 0 — MCPs por projecto (Claude)
 
 Isolamento de servidores MCP por projecto: threads paralelos em projectos diferentes carregam conjuntos distintos de MCPs.
