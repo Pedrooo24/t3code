@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { useParams } from "@tanstack/react-router";
-import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
+import type { EnvironmentId, OrchestrationThreadActivity, ThreadId, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime";
 import { useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
-import { resolveThreadRouteTarget } from "../threadRoutes";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -108,11 +108,21 @@ export interface SessionCostTotal {
  * Returns nulls when no thread is active or no snapshot exists yet.
  */
 export function useSessionCostTotal(): SessionCostTotal {
-  const routeTarget = useParams({
+  const environmentId = useParams({
     strict: false,
-    select: (params) => resolveThreadRouteTarget(params),
+    select: (params) => params.environmentId,
   });
-  const routeThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
+  const threadId = useParams({
+    strict: false,
+    select: (params) => params.threadId,
+  });
+  const routeThreadRef = useMemo(
+    () =>
+      environmentId && threadId
+        ? scopeThreadRef(environmentId as EnvironmentId, threadId as ThreadId)
+        : null,
+    [environmentId, threadId],
+  );
   const threadSelector = useMemo(
     () => createThreadSelectorByRef(routeThreadRef),
     [routeThreadRef],
