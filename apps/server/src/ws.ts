@@ -1,4 +1,4 @@
-import { Cause, Duration, Effect, Layer, Option, Queue, Ref, Schema, Stream } from "effect";
+import { Cause, Duration, Effect, FileSystem, Layer, Option, Path, Queue, Ref, Schema, Stream } from "effect";
 import {
   type AuthAccessStreamEvent,
   AuthSessionId,
@@ -14,6 +14,8 @@ import {
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
+  ProjectClaudeSettingsEnsureError,
+  ProjectClaudeSettingsInfoError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
@@ -43,6 +45,7 @@ import {
   observeRpcStreamEffect,
 } from "./observability/RpcInstrumentation.ts";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
+import { ProviderService } from "./provider/Services/ProviderService.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
@@ -141,6 +144,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const gitStatusBroadcaster = yield* GitStatusBroadcaster;
       const terminalManager = yield* TerminalManager;
       const providerRegistry = yield* ProviderRegistry;
+      const providerService = yield* ProviderService;
       const config = yield* ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents;
       const serverSettings = yield* ServerSettingsService;
@@ -802,6 +806,73 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "workspace" },
           ),
+        [WS_METHODS.projectsClaudeSettingsInfo]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.projectsClaudeSettingsInfo,
+            Effect.gen(function* () {
+              const path = yield* Path.Path;
+              const fileSystem = yield* FileSystem.FileSystem;
+              const settingsPath = path.join(
+                input.workspaceRoot,
+                ".claude",
+                "settings.local.json",
+              );
+              const stat = yield* fileSystem.stat(settingsPath).pipe(Effect.catch(() => Effect.succeed(null)));
+              return {
+                path: settingsPath,
+                exists: stat !== null && stat.type === "File",
+                workspaceRoot: input.workspaceRoot,
+              };
+            }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProjectClaudeSettingsInfoError({
+                    message: `Failed to get Claude settings info: ${cause instanceof Error ? cause.message : String(cause)}`,
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.projectsClaudeSettingsEnsure]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.projectsClaudeSettingsEnsure,
+            Effect.gen(function* () {
+              const path = yield* Path.Path;
+              const fileSystem = yield* FileSystem.FileSystem;
+              const claudeDir = path.join(input.workspaceRoot, ".claude");
+              const settingsPath = path.join(claudeDir, "settings.local.json");
+
+              const existing = yield* fileSystem.stat(settingsPath).pipe(Effect.catch(() => Effect.succeed(null)));
+              if (existing !== null && existing.type === "File") {
+                return { path: settingsPath, created: false };
+              }
+
+              yield* fileSystem.makeDirectory(claudeDir, { recursive: true });
+
+              const template = JSON.stringify(
+                {
+                  _comment:
+                    "Claude per-project MCP overrides. This file is gitignored by Claude convention. Do not commit tokens here.",
+                  mcpServers: {},
+                },
+                null,
+                2,
+              );
+
+              yield* fileSystem.writeFileString(settingsPath, template);
+              return { path: settingsPath, created: true };
+            }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProjectClaudeSettingsEnsureError({
+                    message: `Failed to create Claude settings file: ${cause instanceof Error ? cause.message : String(cause)}`,
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "workspace" },
+          ),
         [WS_METHODS.shellOpenInEditor]: (input) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, open.openInEditor(input), {
             "rpc.aggregate": "workspace",
@@ -982,6 +1053,19 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   payload: { settings },
                 })),
               );
+              const rateLimitsUpdates = providerService.streamEvents.pipe(
+                Stream.filterMap((event) => {
+                  if (event.type !== "account.rate-limits.updated") return Option.none();
+                  const info = event.payload.rateLimits.rate_limit_info;
+                  const rateLimitType = info.rateLimitType;
+                  if (!rateLimitType) return Option.none();
+                  return Option.some({
+                    version: 1 as const,
+                    type: "rateLimitsUpdated" as const,
+                    payload: { rateLimitType, info },
+                  });
+                }),
+              );
 
               yield* Effect.all(
                 [providerRegistry.refresh("codex"), providerRegistry.refresh("claudeAgent")],
@@ -993,7 +1077,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
 
               const liveUpdates = Stream.merge(
                 keybindingsUpdates,
-                Stream.merge(providerStatuses, settingsUpdates),
+                Stream.merge(providerStatuses, Stream.merge(settingsUpdates, rateLimitsUpdates)),
               );
 
               return Stream.concat(

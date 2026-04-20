@@ -1,4 +1,9 @@
+import { useMemo } from "react";
+import { useParams } from "@tanstack/react-router";
 import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
+import { useStore } from "../store";
+import { createThreadSelectorByRef } from "../storeSelectors";
+import { resolveThreadRouteTarget } from "../threadRoutes";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -22,6 +27,8 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
   readonly remainingTokens: number | null;
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
+  readonly estimatedCostUsd: number | null;
+  readonly lastTurnCostUsd: number | null;
   readonly updatedAt: string;
 };
 
@@ -66,6 +73,8 @@ export function deriveLatestContextWindowSnapshot(
       toolUses: asFiniteNumber(payload?.toolUses),
       durationMs: asFiniteNumber(payload?.durationMs),
       compactsAutomatically: asBoolean(payload?.compactsAutomatically) ?? false,
+      estimatedCostUsd: asFiniteNumber(payload?.estimatedCostUsd),
+      lastTurnCostUsd: asFiniteNumber(payload?.lastTurnCostUsd),
       updatedAt: activity.createdAt,
     };
   }
@@ -87,4 +96,34 @@ export function formatContextWindowTokens(value: number | null): string {
     return `${Math.round(value / 1_000)}k`;
   }
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+}
+
+export interface SessionCostTotal {
+  estimatedCostUsd: number | null;
+  usedTokens: number | null;
+}
+
+/**
+ * Aggregates cost and token usage from the active thread's latest context-window snapshot.
+ * Returns nulls when no thread is active or no snapshot exists yet.
+ */
+export function useSessionCostTotal(): SessionCostTotal {
+  const routeTarget = useParams({
+    strict: false,
+    select: (params) => resolveThreadRouteTarget(params),
+  });
+  const routeThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
+  const threadSelector = useMemo(
+    () => createThreadSelectorByRef(routeThreadRef),
+    [routeThreadRef],
+  );
+  const thread = useStore(threadSelector);
+  const snapshot = useMemo(
+    () => deriveLatestContextWindowSnapshot(thread?.activities ?? []),
+    [thread?.activities],
+  );
+  return {
+    estimatedCostUsd: snapshot?.estimatedCostUsd ?? null,
+    usedTokens: snapshot?.usedTokens ?? null,
+  };
 }

@@ -1,4 +1,5 @@
 import { type ProviderKind, type ServerProvider } from "@t3tools/contracts";
+import { strings } from "~/strings";
 import { resolveSelectableModel } from "@t3tools/shared/model";
 import { memo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
@@ -39,7 +40,11 @@ const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
 
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
 const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
-const COMING_SOON_PROVIDER_OPTIONS = [{ id: "gemini", label: "Gemini", icon: Gemini }] as const;
+// ENABLE_GEMINI=1 reveals Gemini in the coming-soon list. Default: hidden.
+const _GEMINI_UI_ENABLED = import.meta.env.VITE_ENABLE_GEMINI === "1";
+const COMING_SOON_PROVIDER_OPTIONS = _GEMINI_UI_ENABLED
+  ? ([{ id: "gemini", label: "Gemini", icon: Gemini }] as const)
+  : ([] as const);
 
 function providerIconClassName(
   provider: ProviderKind | ProviderPickerKind,
@@ -151,10 +156,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 : undefined;
               if (liveProvider && liveProvider.status !== "ready") {
                 const unavailableLabel = !liveProvider.enabled
-                  ? "Disabled"
+                  ? strings.providers.disabled
                   : !liveProvider.installed
-                    ? "Not installed"
-                    : "Unavailable";
+                    ? strings.providers.notInstalled
+                    : strings.providers.unavailable;
                 return (
                   <MenuItem key={option.value} disabled>
                     <OptionIcon
@@ -215,7 +220,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                   />
                   <span>{option.label}</span>
                   <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
-                    Coming soon
+                    {strings.providers.comingSoon}
                   </span>
                 </MenuItem>
               );
@@ -228,7 +233,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                   <OptionIcon aria-hidden="true" className="size-4 shrink-0 opacity-80" />
                   <span>{option.label}</span>
                   <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
-                    Coming soon
+                    {strings.providers.comingSoon}
                   </span>
                 </MenuItem>
               );

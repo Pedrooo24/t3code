@@ -314,6 +314,8 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
   toolUses: Schema.optional(NonNegativeInt),
   durationMs: Schema.optional(NonNegativeInt),
   compactsAutomatically: Schema.optional(Schema.Boolean),
+  estimatedCostUsd: Schema.optional(Schema.Number),
+  lastTurnCostUsd: Schema.optional(Schema.Number),
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 
@@ -528,8 +530,53 @@ const AccountUpdatedPayload = Schema.Struct({
 });
 export type AccountUpdatedPayload = typeof AccountUpdatedPayload.Type;
 
+const RateLimitStatus = Schema.Literal("allowed", "allowed_warning", "rejected");
+const ClaudeRateLimitType = Schema.Literal(
+  "five_hour",
+  "seven_day",
+  "seven_day_opus",
+  "seven_day_sonnet",
+  "overage",
+);
+const OverageDisabledReason = Schema.Literal(
+  "overage_not_provisioned",
+  "org_level_disabled",
+  "org_level_disabled_until",
+  "out_of_credits",
+  "seat_tier_level_disabled",
+  "member_level_disabled",
+  "seat_tier_zero_credit_limit",
+  "group_zero_credit_limit",
+  "member_zero_credit_limit",
+  "org_service_level_disabled",
+  "org_service_zero_credit_limit",
+  "no_limits_configured",
+  "unknown",
+);
+
+const SDKRateLimitInfoSchema = Schema.Struct({
+  status: RateLimitStatus,
+  resetsAt: Schema.optional(Schema.Number),
+  rateLimitType: Schema.optional(ClaudeRateLimitType),
+  utilization: Schema.optional(Schema.Number),
+  overageStatus: Schema.optional(RateLimitStatus),
+  overageResetsAt: Schema.optional(Schema.Number),
+  overageDisabledReason: Schema.optional(OverageDisabledReason),
+  isUsingOverage: Schema.optional(Schema.Boolean),
+  surpassedThreshold: Schema.optional(Schema.Number),
+});
+export type SDKRateLimitInfoPayload = typeof SDKRateLimitInfoSchema.Type;
+export { SDKRateLimitInfoSchema, ClaudeRateLimitType, RateLimitStatus };
+
+const SDKRateLimitEventSchema = Schema.Struct({
+  type: Schema.Literal("rate_limit_event"),
+  rate_limit_info: SDKRateLimitInfoSchema,
+  uuid: Schema.String,
+  session_id: Schema.String,
+});
+
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
-  rateLimits: Schema.Unknown,
+  rateLimits: SDKRateLimitEventSchema,
 });
 export type AccountRateLimitsUpdatedPayload = typeof AccountRateLimitsUpdatedPayload.Type;
 

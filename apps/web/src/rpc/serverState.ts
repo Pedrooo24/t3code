@@ -9,6 +9,8 @@ import {
   type ServerProvider,
   type ServerProviderUpdatedPayload,
   type ServerSettings,
+  type SDKRateLimitInfoPayload,
+  type ServerConfigRateLimitsUpdatedPayload,
 } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 import { useCallback, useRef } from "react";
@@ -69,6 +71,10 @@ export const providersUpdatedAtom = makeStateAtom<ServerProviderUpdatedPayload |
   "server-providers-updated",
   null,
 );
+export const rateLimitsAtom = makeStateAtom<Record<string, SDKRateLimitInfoPayload>>(
+  "server-rate-limits",
+  {},
+);
 
 export function getServerConfig(): ServerConfig | null {
   return appAtomRegistry.get(serverConfigAtom);
@@ -111,7 +117,19 @@ export function applyServerConfigEvent(event: ServerConfigStreamEvent): void {
       applySettingsUpdated(event.payload.settings);
       return;
     }
+    case "rateLimitsUpdated": {
+      applyRateLimitsUpdated(event.payload);
+      return;
+    }
   }
+}
+
+export function applyRateLimitsUpdated(payload: ServerConfigRateLimitsUpdatedPayload): void {
+  const current = appAtomRegistry.get(rateLimitsAtom);
+  appAtomRegistry.set(rateLimitsAtom, {
+    ...current,
+    [payload.rateLimitType]: payload.info,
+  });
 }
 
 export function applyProvidersUpdated(payload: ServerProviderUpdatedPayload): void {

@@ -1,10 +1,12 @@
 import {
   type EnvironmentId,
   type EditorId,
+  type ModelSelection,
   type ProjectScript,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@t3tools/contracts";
+import { strings } from "~/strings";
 import { scopeThreadRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
@@ -13,6 +15,7 @@ import { DiffIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
+import { ModelBadge, type ModelBadgeState } from "./ModelBadge";
 import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
@@ -22,6 +25,8 @@ interface ChatHeaderProps {
   activeThreadId: ThreadId;
   draftId?: DraftId;
   activeThreadTitle: string;
+  activeThreadModelSelection?: ModelSelection | null;
+  modelBadgeState?: ModelBadgeState;
   activeProjectName: string | undefined;
   isGitRepo: boolean;
   openInCwd: string | null;
@@ -48,6 +53,8 @@ export const ChatHeader = memo(function ChatHeader({
   activeThreadId,
   draftId,
   activeThreadTitle,
+  activeThreadModelSelection,
+  modelBadgeState = "idle",
   activeProjectName,
   isGitRepo,
   openInCwd,
@@ -78,6 +85,7 @@ export const ChatHeader = memo(function ChatHeader({
         >
           {activeThreadTitle}
         </h2>
+        <ModelBadge selection={activeThreadModelSelection} state={modelBadgeState} />
         {activeProjectName && (
           <Badge variant="outline" className="min-w-0 shrink overflow-hidden">
             <span className="min-w-0 truncate">{activeProjectName}</span>
@@ -85,7 +93,7 @@ export const ChatHeader = memo(function ChatHeader({
         )}
         {activeProjectName && !isGitRepo && (
           <Badge variant="outline" className="shrink-0 text-[10px] text-amber-700">
-            No Git
+            {strings.chat.noGitRepo}
           </Badge>
         )}
       </div>
@@ -133,10 +141,10 @@ export const ChatHeader = memo(function ChatHeader({
           />
           <TooltipPopup side="bottom">
             {!terminalAvailable
-              ? "Terminal is unavailable until this thread has an active project."
+              ? strings.chat.terminalUnavailable
               : terminalToggleShortcutLabel
-                ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
-                : "Toggle terminal drawer"}
+                ? strings.chat.terminalToggleWithShortcut(terminalToggleShortcutLabel)
+                : strings.chat.terminalToggle}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>
@@ -157,10 +165,10 @@ export const ChatHeader = memo(function ChatHeader({
           />
           <TooltipPopup side="bottom">
             {!isGitRepo
-              ? "Diff panel is unavailable because this project is not a git repository."
+              ? strings.chat.diffUnavailable
               : diffToggleShortcutLabel
-                ? `Toggle diff panel (${diffToggleShortcutLabel})`
-                : "Toggle diff panel"}
+                ? strings.chat.diffToggleWithShortcut(diffToggleShortcutLabel)
+                : strings.chat.diffToggle}
           </TooltipPopup>
         </Tooltip>
       </div>

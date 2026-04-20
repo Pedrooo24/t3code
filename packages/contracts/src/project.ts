@@ -53,3 +53,44 @@ export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteF
     cause: Schema.optional(Schema.Defect),
   },
 ) {}
+
+// Claude per-project MCP settings
+
+export const ProjectClaudeSettingsInfoInput = Schema.Struct({
+  workspaceRoot: TrimmedNonEmptyString,
+});
+export type ProjectClaudeSettingsInfoInput = typeof ProjectClaudeSettingsInfoInput.Type;
+
+export const ProjectClaudeSettingsInfoResult = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  exists: Schema.Boolean,
+  workspaceRoot: TrimmedNonEmptyString,
+});
+export type ProjectClaudeSettingsInfoResult = typeof ProjectClaudeSettingsInfoResult.Type;
+
+export class ProjectClaudeSettingsInfoError extends Schema.TaggedErrorClass<ProjectClaudeSettingsInfoError>()(
+  "ProjectClaudeSettingsInfoError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export const ProjectClaudeSettingsEnsureInput = Schema.Struct({
+  workspaceRoot: TrimmedNonEmptyString,
+});
+export type ProjectClaudeSettingsEnsureInput = typeof ProjectClaudeSettingsEnsureInput.Type;
+
+export const ProjectClaudeSettingsEnsureResult = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  created: Schema.Boolean,
+});
+export type ProjectClaudeSettingsEnsureResult = typeof ProjectClaudeSettingsEnsureResult.Type;
+
+export class ProjectClaudeSettingsEnsureError extends Schema.TaggedErrorClass<ProjectClaudeSettingsEnsureError>()(
+  "ProjectClaudeSettingsEnsureError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}

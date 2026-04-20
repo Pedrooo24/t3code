@@ -14,6 +14,7 @@ import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import {
   query as claudeQuery,
   type SlashCommand as ClaudeSlashCommand,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
 import {
@@ -30,6 +31,7 @@ import {
 import { compareCliVersions } from "../cliVersion.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import { ClaudeProvider } from "../Services/ClaudeProvider.ts";
+import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ServerSettingsError } from "@t3tools/contracts";
 
@@ -480,27 +482,49 @@ function dedupeSlashCommands(
   return [...commandsByName.values()];
 }
 
+export function waitForAbortSignal(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
+
 /**
  * Probe account information by spawning a lightweight Claude Agent SDK
  * session and reading the initialization result.
  *
- * The prompt is never sent to the Anthropic API — we abort immediately
- * after the local initialization phase completes. This gives us the
- * user's subscription type without incurring any token cost.
+ * We pass a never-yielding AsyncIterable as the prompt so that no user
+ * message is ever written to the subprocess stdin. This means the Claude
+ * Code subprocess completes its local initialization IPC (returning
+ * account info and slash commands) but never starts an API request to
+ * Anthropic. We read the init data and then abort the subprocess.
+ *
+ * `cwd` determines how the SDK resolves the `"project"` and `"local"`
+ * setting sources, which is how project-level slash commands (including
+ * `.claude/skills/`) enter the initialization result. Pass the active
+ * project directory; otherwise the SDK falls back to the T3 server
+ * process cwd and project-level commands are missed (#2048).
  *
  * This is used as a fallback when `claude auth status` does not include
  * subscription type information.
  */
-const probeClaudeCapabilities = (binaryPath: string) => {
+const probeClaudeCapabilities = (binaryPath: string, cwd?: string) => {
   const abort = new AbortController();
   return Effect.tryPromise(async () => {
     const q = claudeQuery({
-      prompt: ".",
+      // Never yield — we only need initialization data, not a conversation.
+      // This prevents any prompt from reaching the Anthropic API.
+      // oxlint-disable-next-line require-yield
+      prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
+        await waitForAbortSignal(abort.signal);
+      })(),
       options: {
         persistSession: false,
         pathToClaudeCodeExecutable: binaryPath,
+        ...(cwd ? { cwd } : {}),
         abortController: abort,
-        maxTurns: 0,
         settingSources: ["user", "project", "local"],
         allowedTools: [],
         stderr: () => {},
@@ -785,25 +809,47 @@ const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): ServerProvid
   });
 };
 
+/**
+ * Cache key for the Claude capability probe. `cwd` is included so probes
+ * from two different project directories stay in separate cache entries;
+ * a probe from `/repo-a` must not satisfy a probe for `/repo-b` because
+ * the SDK resolves `.claude/skills` against the provided cwd (#2048).
+ */
+export const claudeProbeCacheKey = (binaryPath: string, cwd?: string) =>
+  `${binaryPath}|${cwd ?? ""}`;
+
 export const ClaudeProviderLive = Layer.effect(
   ClaudeProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    // The active workspace the server was launched in. We pass this as the
+    // probe cwd so the Claude Agent SDK resolves `settingSources: ['project',
+    // 'local']` — and therefore `.claude/skills/` — against the user's
+    // project instead of the T3 server process cwd (#2048).
+    const { cwd: workspaceRoot } = yield* ServerConfig;
 
+    // Cache key is `${binaryPath}|${cwd ?? ''}` so probes with different
+    // project cwds don't collide. Capacity is 8 so a handful of recent
+    // projects stay cached without ballooning memory (#2048).
     const subscriptionProbeCache = yield* Cache.make({
-      capacity: 1,
+      capacity: 8,
       timeToLive: Duration.minutes(5),
-      lookup: (binaryPath: string) => probeClaudeCapabilities(binaryPath),
+      lookup: (key: string) => {
+        const sep = key.indexOf("|");
+        const binaryPath = sep >= 0 ? key.slice(0, sep) : key;
+        const cwd = sep >= 0 ? key.slice(sep + 1) : "";
+        return probeClaudeCapabilities(binaryPath, cwd || undefined);
+      },
     });
 
     const checkProvider = checkClaudeProviderStatus(
       (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
+        Cache.get(subscriptionProbeCache, claudeProbeCacheKey(binaryPath, workspaceRoot)).pipe(
           Effect.map((probe) => probe?.subscriptionType),
         ),
       (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
+        Cache.get(subscriptionProbeCache, claudeProbeCacheKey(binaryPath, workspaceRoot)).pipe(
           Effect.map((probe) => probe?.slashCommands),
         ),
     ).pipe(

@@ -69,6 +69,7 @@ import {
 } from "../pendingUserInput";
 import {
   selectProjectsAcrossEnvironments,
+  selectSidebarThreadSummaryByRef,
   selectThreadsAcrossEnvironments,
   useStore,
 } from "../store";
@@ -137,6 +138,7 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
+import { SubagentPanel } from "./chat/SubagentPanel";
 import { ChatHeader } from "./chat/ChatHeader";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
@@ -775,8 +777,8 @@ export default function ChatView(props: ChatViewProps) {
             threadId,
             draftThread,
             fallbackDraftProject?.defaultModelSelection ?? {
-              provider: "codex",
-              model: DEFAULT_MODEL_BY_PROVIDER.codex,
+              provider: "claudeAgent",
+              model: DEFAULT_MODEL_BY_PROVIDER.claudeAgent,
             },
             localDraftError,
           )
@@ -795,6 +797,12 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadRef = useMemo(
     () => (activeThread ? scopeThreadRef(activeThread.environmentId, activeThread.id) : null),
     [activeThread],
+  );
+  const activeThreadSummary = useStore(
+    useMemo(
+      () => (state) => selectSidebarThreadSummaryByRef(state, activeThreadRef) ?? null,
+      [activeThreadRef],
+    ),
   );
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
   const existingOpenTerminalThreadKeys = useMemo(() => {
@@ -1063,12 +1071,22 @@ export default function ChatView(props: ChatViewProps) {
     [activeLatestTurn?.turnId, threadActivities],
   );
   const pendingApprovals = useMemo(
-    () => derivePendingApprovals(threadActivities),
-    [threadActivities],
+    () =>
+      derivePendingApprovals(threadActivities, {
+        ...(activeThreadSummary?.hasPendingApprovals !== undefined
+          ? { hasPendingApprovals: activeThreadSummary.hasPendingApprovals }
+          : {}),
+      }),
+    [activeThreadSummary?.hasPendingApprovals, threadActivities],
   );
   const pendingUserInputs = useMemo(
-    () => derivePendingUserInputs(threadActivities),
-    [threadActivities],
+    () =>
+      derivePendingUserInputs(threadActivities, {
+        ...(activeThreadSummary?.hasPendingUserInput !== undefined
+          ? { hasPendingUserInput: activeThreadSummary.hasPendingUserInput }
+          : {}),
+      }),
+    [activeThreadSummary?.hasPendingUserInput, threadActivities],
   );
   const activePendingUserInput = pendingUserInputs[0] ?? null;
   const activePendingDraftAnswers = useMemo(
@@ -2538,7 +2556,7 @@ export default function ChatView(props: ChatViewProps) {
         ctxSelectedProvider,
         ctxSelectedModel ||
           activeProject.defaultModelSelection?.model ||
-          DEFAULT_MODEL_BY_PROVIDER.codex,
+          DEFAULT_MODEL_BY_PROVIDER.claudeAgent,
         ctxSelectedModelSelection.options,
       );
 
@@ -3222,6 +3240,7 @@ export default function ChatView(props: ChatViewProps) {
           activeThreadId={activeThread.id}
           {...(routeKind === "draft" && draftId ? { draftId } : {})}
           activeThreadTitle={activeThread.title}
+          activeThreadModelSelection={activeThread.modelSelection}
           activeProjectName={activeProject?.name}
           isGitRepo={isGitRepo}
           openInCwd={gitCwd}
@@ -3258,6 +3277,7 @@ export default function ChatView(props: ChatViewProps) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Messages Wrapper */}
           <div className="relative flex min-h-0 flex-1 flex-col">
+            <SubagentPanel activities={threadActivities} />
             {/* Messages — LegendList handles virtualization and scrolling internally */}
             <MessagesTimeline
               key={activeThread.id}

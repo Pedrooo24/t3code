@@ -18,10 +18,13 @@ import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
   CheckIcon,
+  ChevronDown,
+  ChevronRight,
   CircleAlertIcon,
   EyeIcon,
   GlobeIcon,
   HammerIcon,
+  Loader2,
   type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -45,6 +48,7 @@ import {
   type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
 import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
+import { ToolCallDetail } from "./ToolCallDetail";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   deriveDisplayedUserMessageState,
@@ -560,13 +564,17 @@ const WorkGroupSection = memo(function WorkGroupSection({
         </div>
       )}
       <div className="space-y-0.5">
-        {visibleEntries.map((workEntry) => (
-          <SimpleWorkEntryRow
-            key={`work-row:${workEntry.id}`}
-            workEntry={workEntry}
-            workspaceRoot={workspaceRoot}
-          />
-        ))}
+        {visibleEntries.map((workEntry) =>
+          workEntry.tone === "thinking" ? (
+            <ThinkingBlock key={`work-row:${workEntry.id}`} entry={workEntry} />
+          ) : (
+            <SimpleWorkEntryRow
+              key={`work-row:${workEntry.id}`}
+              workEntry={workEntry}
+              workspaceRoot={workspaceRoot}
+            />
+          ),
+        )}
       </div>
     </div>
   );
@@ -930,11 +938,52 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
   return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
 }
 
+const ThinkingBlock = memo(function ThinkingBlock({ entry }: { entry: TimelineWorkEntry }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const content = entry.detail ?? entry.label ?? "";
+  const hasMore = content.split("\n").length > 2 || content.length > 180;
+  return (
+    <div className="rounded-md border border-border/40 bg-muted/15 px-2 py-1.5">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground/55">
+          Thinking
+        </span>
+        {hasMore && (
+          <button
+            type="button"
+            className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 hover:text-foreground/75"
+            onClick={() => setIsExpanded((v) => !v)}
+          >
+            {isExpanded ? "Collapse" : "Expand"}
+          </button>
+        )}
+      </div>
+      <p
+        className={cn("whitespace-pre-wrap text-[11px] leading-5 text-muted-foreground/70")}
+        style={
+          !isExpanded
+            ? {
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }
+            : undefined
+        }
+      >
+        {content}
+      </p>
+    </div>
+  );
+});
+
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
   workspaceRoot: string | undefined;
 }) {
   const { workEntry, workspaceRoot } = props;
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const hasRawPayload = workEntry.rawPayload != null;
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
@@ -958,6 +1007,16 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
         >
           <EntryIcon className="size-3" />
         </span>
+        {workEntry.toolKind === "mcp" && (
+          <span className="shrink-0 rounded border border-teal-700/40 bg-teal-700/10 px-1 text-[9px] font-medium uppercase tracking-wide text-teal-700 dark:text-teal-300">
+            MCP
+          </span>
+        )}
+        {workEntry.toolKind === "agent" && (
+          <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1 text-[9px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-300">
+            AGENT
+          </span>
+        )}
         <div className="min-w-0 flex-1 overflow-hidden">
           {rawCommand ? (
             <div className="max-w-full">
@@ -1025,7 +1084,27 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
             </Tooltip>
           )}
         </div>
+        {workEntry.isRunning && !workEntry.isStalled && (
+          <span aria-hidden className="shrink-0 text-teal-600 dark:text-teal-400">
+            <Loader2 className="size-3 animate-spin" />
+          </span>
+        )}
+        {hasRawPayload && (
+          <button
+            type="button"
+            onClick={() => setIsDetailOpen((v) => !v)}
+            className="shrink-0 text-muted-foreground/40 hover:text-foreground/70"
+            aria-label={isDetailOpen ? "Hide raw payload" : "Show raw payload"}
+          >
+            {isDetailOpen ? (
+              <ChevronDown className="size-3" />
+            ) : (
+              <ChevronRight className="size-3" />
+            )}
+          </button>
+        )}
       </div>
+      {hasRawPayload && isDetailOpen && <ToolCallDetail payload={workEntry.rawPayload} />}
       {hasChangedFiles && !previewIsChangedFiles && (
         <div className="mt-1 flex flex-wrap gap-1 pl-6">
           {workEntry.changedFiles?.slice(0, 4).map((filePath) => {

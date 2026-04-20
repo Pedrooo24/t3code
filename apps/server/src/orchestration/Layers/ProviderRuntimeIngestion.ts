@@ -119,11 +119,17 @@ function assistantSegmentMessageId(baseKey: string, segmentIndex: number): Messa
 }
 function buildContextWindowActivityPayload(
   event: ProviderRuntimeEvent,
+  costByThread: ReadonlyMap<string, { total: number; last: number }>,
 ): ThreadTokenUsageSnapshot | undefined {
   if (event.type !== "thread.token-usage.updated" || event.payload.usage.usedTokens <= 0) {
     return undefined;
   }
-  return event.payload.usage;
+  const threadId = event.threadId;
+  const cost = threadId ? costByThread.get(threadId) : undefined;
+  return {
+    ...event.payload.usage,
+    ...(cost ? { estimatedCostUsd: cost.total, lastTurnCostUsd: cost.last } : {}),
+  };
 }
 
 function normalizeRuntimeTurnState(
@@ -179,6 +185,7 @@ function requestKindFromCanonicalRequestType(
 
 function runtimeEventToActivities(
   event: ProviderRuntimeEvent,
+  costByThread: ReadonlyMap<string, { total: number; last: number }>,
 ): ReadonlyArray<OrchestrationThreadActivity> {
   const maybeSequence = (() => {
     const eventWithSequence = event as ProviderRuntimeEvent & { sessionSequence?: number };
@@ -428,7 +435,7 @@ function runtimeEventToActivities(
     }
 
     case "thread.token-usage.updated": {
-      const payload = buildContextWindowActivityPayload(event);
+      const payload = buildContextWindowActivityPayload(event, costByThread);
       if (!payload) {
         return [];
       }
@@ -531,6 +538,8 @@ const make = Effect.gen(function* () {
     timeToLive: TURN_MESSAGE_IDS_BY_TURN_TTL,
     lookup: () => Effect.succeed(new Set<MessageId>()),
   });
+
+  const costByThread = new Map<string, { total: number; last: number }>();
 
   const bufferedAssistantTextByMessageId = yield* Cache.make<MessageId, string>({
     capacity: BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_CACHE_CAPACITY,
@@ -1436,6 +1445,17 @@ const make = Effect.gen(function* () {
         }
       }
 
+      if (event.type === "turn.completed") {
+        const cost = event.payload.totalCostUsd;
+        if (cost != null && cost > 0) {
+          const prev = costByThread.get(thread.id);
+          costByThread.set(thread.id, {
+            total: (prev?.total ?? 0) + cost,
+            last: cost,
+          });
+        }
+      }
+
       if (event.type === "session.exited") {
         yield* clearTurnStateForSession(thread.id);
       }
@@ -1509,7 +1529,7 @@ const make = Effect.gen(function* () {
         }
       }
 
-      const activities = runtimeEventToActivities(event);
+      const activities = runtimeEventToActivities(event, costByThread);
       yield* Effect.forEach(activities, (activity) =>
         orchestrationEngine.dispatch({
           type: "thread.activity.append",

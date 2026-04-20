@@ -49,6 +49,12 @@ import {
   OrchestrationRpcSchemas,
 } from "./orchestration.ts";
 import {
+  ProjectClaudeSettingsEnsureError,
+  ProjectClaudeSettingsEnsureInput,
+  ProjectClaudeSettingsEnsureResult,
+  ProjectClaudeSettingsInfoError,
+  ProjectClaudeSettingsInfoInput,
+  ProjectClaudeSettingsInfoResult,
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -119,6 +125,10 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
 
+  // Claude per-project MCP settings
+  projectsClaudeSettingsInfo: "projects.claudeSettingsInfo",
+  projectsClaudeSettingsEnsure: "projects.claudeSettingsEnsure",
+
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",
   subscribeTerminalEvents: "subscribeTerminalEvents",
@@ -167,6 +177,21 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   success: ProjectWriteFileResult,
   error: ProjectWriteFileError,
 });
+
+export const WsProjectsClaudeSettingsInfoRpc = Rpc.make(WS_METHODS.projectsClaudeSettingsInfo, {
+  payload: ProjectClaudeSettingsInfoInput,
+  success: ProjectClaudeSettingsInfoResult,
+  error: ProjectClaudeSettingsInfoError,
+});
+
+export const WsProjectsClaudeSettingsEnsureRpc = Rpc.make(
+  WS_METHODS.projectsClaudeSettingsEnsure,
+  {
+    payload: ProjectClaudeSettingsEnsureInput,
+    success: ProjectClaudeSettingsEnsureResult,
+    error: ProjectClaudeSettingsEnsureError,
+  },
+);
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
@@ -363,6 +388,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
+  WsProjectsClaudeSettingsInfoRpc,
+  WsProjectsClaudeSettingsEnsureRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeGitStatusRpc,

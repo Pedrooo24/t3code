@@ -13,6 +13,7 @@ import { EditorId } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
 import { ProviderKind } from "./orchestration.ts";
 import { ServerSettings } from "./settings.ts";
+import { SDKRateLimitInfoSchema, ClaudeRateLimitType } from "./providerRuntime.ts";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
   kind: Schema.Literal("keybindings.malformed-config"),
@@ -188,11 +189,27 @@ export const ServerConfigStreamSettingsUpdatedEvent = Schema.Struct({
 export type ServerConfigStreamSettingsUpdatedEvent =
   typeof ServerConfigStreamSettingsUpdatedEvent.Type;
 
+export const ServerConfigRateLimitsUpdatedPayload = Schema.Struct({
+  rateLimitType: ClaudeRateLimitType,
+  info: SDKRateLimitInfoSchema,
+});
+export type ServerConfigRateLimitsUpdatedPayload =
+  typeof ServerConfigRateLimitsUpdatedPayload.Type;
+
+export const ServerConfigStreamRateLimitsUpdatedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("rateLimitsUpdated"),
+  payload: ServerConfigRateLimitsUpdatedPayload,
+});
+export type ServerConfigStreamRateLimitsUpdatedEvent =
+  typeof ServerConfigStreamRateLimitsUpdatedEvent.Type;
+
 export const ServerConfigStreamEvent = Schema.Union([
   ServerConfigStreamSnapshotEvent,
   ServerConfigStreamKeybindingsUpdatedEvent,
   ServerConfigStreamProviderStatusesEvent,
   ServerConfigStreamSettingsUpdatedEvent,
+  ServerConfigStreamRateLimitsUpdatedEvent,
 ]);
 export type ServerConfigStreamEvent = typeof ServerConfigStreamEvent.Type;
 
