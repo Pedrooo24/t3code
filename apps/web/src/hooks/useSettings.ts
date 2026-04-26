@@ -124,6 +124,8 @@ function splitPatch(patch: Partial<UnifiedSettings>): {
  */
 
 export function useSettings<T = UnifiedSettings>(selector?: (s: UnifiedSettings) => T): T {
+  "use no memo";
+
   const serverSettings = useServerSettings();
   const clientSettings = useSyncExternalStore(
     subscribeClientSettings,
@@ -143,6 +145,8 @@ export function useSettings<T = UnifiedSettings>(selector?: (s: UnifiedSettings)
   // selector devolve objecto novo com os mesmos valores (arrow inline).
   // Recalcular o selector a cada render e barato; o que evitamos e propagar
   // uma nova referencia para baixo quando os valores nao mudaram.
+  // Nota: "use no memo" acima e necessario para que o React Compiler nao
+  // interfira com a mutacao de ref durante render.
   const lastRef = useRef<T | null>(null);
   const next = selector ? selector(merged) : (merged as unknown as T);
   if (lastRef.current !== null && shallowEqual(lastRef.current, next)) {
