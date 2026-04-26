@@ -504,11 +504,257 @@ export function hasActionableProposedPlan(
   return proposedPlan !== null && proposedPlan.implementedAt === null;
 }
 
+// ---------------------------------------------------------------------------
+// Tool classification utilities
+// ---------------------------------------------------------------------------
+
+export type ToolCallKind = "mcp" | "skill" | "agent" | "bash" | "edit" | "read" | "web" | "other";
+
+export interface ToolCallClassification {
+  kind: ToolCallKind;
+  server?: string;
+  tool: string;
+  label: string;
+}
+
+export interface SubagentDescriptor {
+  subagentType: string;
+  model: string | null;
+  effort: string | null;
+  description: string | null;
+  prompt: string | null;
+  runInBackground: boolean;
+}
+
+function extractPayloadData(activity: OrchestrationThreadActivity): Record<string, unknown> | null {
+  const p = activity.payload as Record<string, unknown> | null | undefined;
+  if (!p) return null;
+  const d = p.data;
+  if (d && typeof d === "object") return d as Record<string, unknown>;
+  return null;
+}
+
+function extractDataInput(activity: OrchestrationThreadActivity): Record<string, unknown> | null {
+  const data = extractPayloadData(activity);
+  if (!data) return null;
+  const input = data.input;
+  if (input && typeof input === "object") return input as Record<string, unknown>;
+  return null;
+}
+
+/**
+ * Classify a tool call activity into a typed category with display label.
+ * Uses only client-side parsing of the activity payload - no server changes.
+ */
+export function classifyToolCall(activity: OrchestrationThreadActivity): ToolCallClassification {
+  const data = extractPayloadData(activity);
+  const input = extractDataInput(activity);
+
+  // Determine tool name from various payload fields
+  const toolName: string =
+    (typeof data?.toolName === "string" ? data.toolName : null) ??
+    (typeof input?.name === "string" ? input.name : null) ??
+    (typeof data?.name === "string" ? data.name : null) ??
+    "";
+
+  // Agent / Task tool
+  if (toolName === "Agent" || toolName === "Task") {
+    const subagentType =
+      (typeof input?.subagent_type === "string" ? input.subagent_type : null) ??
+      (typeof input?.subagentType === "string" ? input.subagentType : null) ??
+      "subagent";
+    return {
+      kind: "agent",
+      tool: toolName,
+      label: `Agent(${subagentType})`,
+    };
+  }
+
+  // Skill tool
+  if (toolName === "Skill") {
+    const skillName = typeof input?.skill === "string" ? input.skill : (typeof input?.command === "string" ? input.command : "unknown");
+    return {
+      kind: "skill",
+      tool: "Skill",
+      label: `Skill(${skillName})`,
+    };
+  }
+
+  // MCP tool: mcp__<server>__<tool> or mcp__plugin_<plugin>_<server>__<tool>
+  if (toolName.startsWith("mcp__")) {
+    const parts = toolName.split("__");
+    // parts[0] = "mcp", parts[1] = server (possibly plugin_xxx_server), parts[2+] = tool
+    const server = parts[1] ?? "unknown";
+    const tool = parts.slice(2).join("__") || "unknown";
+    const displayServer = server.startsWith("plugin_")
+      ? server.replace(/^plugin_[^_]+_/, "")
+      : server;
+    return {
+      kind: "mcp",
+      server: displayServer,
+      tool,
+      label: `MCP[${displayServer}]/${tool}`,
+    };
+  }
+
+  // Fallback by itemType
+  const itemType = (activity.payload as Record<string, unknown> | null | undefined)?.itemType;
+
+  if (itemType === "mcp_tool_call") {
+    const detail = (activity.payload as Record<string, unknown> | null | undefined)?.detail;
+    const detailStr = typeof detail === "string" ? detail : "";
+    return {
+      kind: "mcp",
+      server: "mcp",
+      tool: detailStr || toolName || "tool",
+      label: `MCP ${detailStr || toolName || "tool"}`,
+    };
+  }
+
+  if (itemType === "collab_agent_tool_call" || itemType === "dynamic_tool_call") {
+    return {
+      kind: "agent",
+      tool: toolName || "Agent",
+      label: `Agent(${toolName || "subagent"})`,
+    };
+  }
+
+  // Builtin tool classification by name
+  const lower = toolName.toLowerCase();
+  if (lower === "bash" || lower === "computer" || itemType === "command_execution") {
+    return { kind: "bash", tool: toolName || "Bash", label: "Bash" };
+  }
+  if (lower === "write" || lower === "edit" || lower === "multiedit" || itemType === "file_change") {
+    return { kind: "edit", tool: toolName || "Edit", label: toolName || "Edit" };
+  }
+  if (lower === "read" || lower === "glob" || lower === "grep" || lower === "ls") {
+    return { kind: "read", tool: toolName || "Read", label: toolName || "Read" };
+  }
+  if (lower === "webfetch" || lower === "websearch" || itemType === "web_search") {
+    return { kind: "web", tool: toolName || "Web", label: toolName || "Web" };
+  }
+
+  return {
+    kind: "other",
+    tool: toolName || "Tool",
+    label: toolName || activity.summary || "Tool",
+  };
+}
+
+/**
+ * Extract subagent metadata from a tool.started activity for an Agent/Task tool.
+ * Returns null if the activity is not an agent call.
+ */
+export function subagentDescriptor(
+  activity: OrchestrationThreadActivity,
+): SubagentDescriptor | null {
+  const data = extractPayloadData(activity);
+  const input = extractDataInput(activity);
+  if (!input) return null;
+
+  const toolName =
+    (typeof data?.toolName === "string" ? data.toolName : null) ??
+    (typeof input.name === "string" ? input.name : null) ??
+    "";
+
+  if (toolName !== "Agent" && toolName !== "Task") {
+    // Also check itemType
+    const itemType = (activity.payload as Record<string, unknown> | null | undefined)?.itemType;
+    if (itemType !== "collab_agent_tool_call" && itemType !== "dynamic_tool_call") {
+      return null;
+    }
+  }
+
+  return {
+    subagentType:
+      (typeof input.subagent_type === "string" ? input.subagent_type : null) ??
+      (typeof input.subagentType === "string" ? input.subagentType : null) ??
+      "subagent",
+    model: typeof input.model === "string" ? input.model : null,
+    effort: typeof input.effort === "string" ? input.effort : null,
+    description: typeof input.description === "string" ? input.description : null,
+    prompt: typeof input.prompt === "string" ? input.prompt : null,
+    runInBackground: typeof input.run_in_background === "boolean" ? input.run_in_background : false,
+  };
+}
+
+/**
+ * Group activities by parent_tool_use_id for building subagent transcripts.
+ * Activities without parent_tool_use_id are grouped under the empty string key.
+ */
+export function groupActivitiesBySubagent(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): Map<string, OrchestrationThreadActivity[]> {
+  const result = new Map<string, OrchestrationThreadActivity[]>();
+  for (const activity of activities) {
+    const a = activity as OrchestrationThreadActivity & { parentToolUseId?: string };
+    const key = a.parentToolUseId ?? "";
+    const arr = result.get(key) ?? [];
+    arr.push(activity);
+    result.set(key, arr);
+  }
+  return result;
+}
+
+/**
+ * Extract the final response text delivered by a subagent to the orchestrator.
+ * Finds the tool.completed activity whose toolCallId matches parentToolUseId.
+ */
+export function extractFinalAgentResponse(
+  parentToolUseId: string,
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): string | null {
+  for (const activity of activities) {
+    if (activity.kind !== "tool.completed") continue;
+    const payload = activity.payload as Record<string, unknown> | null | undefined;
+    const data = payload?.data as Record<string, unknown> | null | undefined;
+    const callId = data?.toolCallId;
+    if (callId === parentToolUseId) {
+      const result = data?.result;
+      if (typeof result === "string" && result.trim()) return result.trim();
+      const rawOutput = data?.rawOutput as Record<string, unknown> | null | undefined;
+      if (rawOutput) {
+        const content = rawOutput.content;
+        if (typeof content === "string" && content.trim()) return content.trim();
+        if (Array.isArray(content)) {
+          const joined = content
+            .map((c: unknown) =>
+              typeof c === "object" && c !== null
+                ? ((c as Record<string, unknown>).text as string | undefined)
+                : null,
+            )
+            .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+            .join("\n");
+          if (joined.trim()) return joined.trim();
+        }
+      }
+    }
+  }
+  return null;
+}
+
+export interface WorkLogFilters {
+  errors?: boolean;
+  thinking?: boolean;
+  mcp?: boolean;
+  skills?: boolean;
+  tools?: boolean;
+  agents?: boolean;
+}
+
 export function deriveWorkLogEntries(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
+  options?: { limit?: number; filters?: WorkLogFilters },
 ): WorkLogEntry[] {
   const now = Date.now();
+  const filters = options?.filters ?? {};
+  const limit = options?.limit ?? 20;
+
+  // When all filter flags are absent (default), show everything (backwards-compat).
+  // When at least one flag is explicitly set, use them as toggles.
+  const hasExplicitFilters = Object.keys(filters).length > 0;
+
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
   const entries = ordered
     .filter((activity) => (latestTurnId ? activity.turnId === latestTurnId : true))
@@ -519,8 +765,34 @@ export function deriveWorkLogEntries(
     .filter((activity) => !isPlanBoundaryToolActivity(activity))
     .map(toDerivedWorkLogEntry);
   const collapsed = collapseDerivedWorkLogEntries(entries);
+
+  // Apply filters when explicitly provided
+  const filtered = hasExplicitFilters
+    ? collapsed.filter((entry) => {
+        if (entry.tone === "error") return filters.errors !== false;
+        if (entry.tone === "thinking") return filters.thinking !== false;
+        if (entry.toolKind === "mcp") return filters.mcp !== false;
+        if (entry.toolKind === "agent") return filters.agents !== false;
+        // skills - detect via classification
+        const cls = classifyToolCall(
+          // Synthesise minimal activity for classification from entry data
+          {
+            id: entry.id,
+            createdAt: entry.createdAt,
+            kind: "tool.completed",
+            tone: "tool",
+            summary: entry.label,
+            turnId: null,
+            payload: entry.rawPayload,
+          } as unknown as OrchestrationThreadActivity,
+        );
+        if (cls.kind === "skill") return filters.skills !== false;
+        return filters.tools !== false;
+      })
+    : collapsed;
+
   // Mark stalled: tool.started entries still running past threshold
-  for (const entry of collapsed) {
+  for (const entry of filtered) {
     if (entry.isRunning) {
       const startedMs = Date.parse(entry.createdAt);
       if (!Number.isNaN(startedMs) && now - startedMs > TOOL_STALLED_THRESHOLD_MS) {
@@ -529,7 +801,11 @@ export function deriveWorkLogEntries(
       }
     }
   }
-  return collapsed.map(
+
+  // Limit to last N entries (most recent first via reverse, then re-sort)
+  const sliced = filtered.slice(-limit);
+
+  return sliced.map(
     ({ activityKind: _activityKind, collapseKey: _collapseKey, ...entry }) => entry,
   );
 }
@@ -705,7 +981,7 @@ function mergeDerivedWorkLogEntries(
   const isRunning =
     next.activityKind === "tool.completed" || next.activityKind === "tool.updated"
       ? false
-      : (next.isRunning ?? previous.isRunning);
+      : (next.isRunning ?? previous.isRunning ?? false);
   return {
     ...previous,
     ...next,

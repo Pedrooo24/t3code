@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
-import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
+import { deriveTimelineEntries, formatElapsed, classifyToolCall } from "../../session-logic";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
@@ -26,6 +26,9 @@ import {
   HammerIcon,
   Loader2,
   type LucideIcon,
+  Pencil,
+  Plug,
+  Puzzle,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -898,29 +901,86 @@ function workEntryRawCommand(
   return rawCommand === workEntry.command.trim() ? null : rawCommand;
 }
 
-function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
-  if (workEntry.requestKind === "command") return TerminalIcon;
-  if (workEntry.requestKind === "file-read") return EyeIcon;
-  if (workEntry.requestKind === "file-change") return SquarePenIcon;
+interface WorkEntryIconInfo {
+  icon: LucideIcon;
+  colorClass?: string;
+  kindLabel?: string;
+  kindBadgeClass?: string;
+}
+
+function workEntryIconInfo(workEntry: TimelineWorkEntry): WorkEntryIconInfo {
+  if (workEntry.requestKind === "command")
+    return { icon: TerminalIcon };
+  if (workEntry.requestKind === "file-read")
+    return { icon: EyeIcon };
+  if (workEntry.requestKind === "file-change")
+    return { icon: SquarePenIcon };
+
+  // Enhanced classification using toolTitle for MCP/Skill/Agent detection
+  const toolName = workEntry.toolTitle ?? workEntry.label ?? "";
+
+  if (toolName === "Agent" || toolName === "Task" || workEntry.toolKind === "agent" ||
+      workEntry.itemType === "collab_agent_tool_call" || workEntry.itemType === "dynamic_tool_call") {
+    // Extract subagent type from label for display
+    const agentMatch = workEntry.label?.match(/^Agent\((.+)\)$/) ?? workEntry.toolTitle?.match(/^(.+)$/);
+    const agentType = agentMatch?.[1] ?? "Agent";
+    return {
+      icon: BotIcon,
+      colorClass: "text-emerald-500 dark:text-emerald-400",
+      kindLabel: agentType,
+      kindBadgeClass: "border-emerald-600/30 bg-emerald-600/8 text-emerald-600 dark:text-emerald-400",
+    };
+  }
+
+  if (toolName.startsWith("mcp__") || workEntry.toolKind === "mcp" || workEntry.itemType === "mcp_tool_call") {
+    // Extract server from toolTitle if available
+    const parts = toolName.startsWith("mcp__") ? toolName.split("__") : [];
+    const server = parts[1]
+      ? (parts[1].startsWith("plugin_") ? parts[1].replace(/^plugin_[^_]+_/, "") : parts[1])
+      : null;
+    const label = server ? `MCP[${server}]` : "MCP";
+    return {
+      icon: Plug,
+      colorClass: "text-teal-500 dark:text-teal-400",
+      kindLabel: label,
+      kindBadgeClass: "border-teal-700/35 bg-teal-700/8 text-teal-700 dark:text-teal-300",
+    };
+  }
+
+  if (toolName === "Skill") {
+    const skillName = workEntry.label?.replace(/^Skill\((.+)\)$/, "$1") ?? workEntry.detail ?? "Skill";
+    return {
+      icon: Puzzle,
+      colorClass: "text-violet-500 dark:text-violet-400",
+      kindLabel: skillName,
+      kindBadgeClass: "border-violet-500/30 bg-violet-500/8 text-violet-600 dark:text-violet-400",
+    };
+  }
 
   if (workEntry.itemType === "command_execution" || workEntry.command) {
-    return TerminalIcon;
+    return { icon: TerminalIcon };
   }
   if (workEntry.itemType === "file_change" || (workEntry.changedFiles?.length ?? 0) > 0) {
-    return SquarePenIcon;
+    return { icon: SquarePenIcon };
   }
-  if (workEntry.itemType === "web_search") return GlobeIcon;
-  if (workEntry.itemType === "image_view") return EyeIcon;
+  if (workEntry.itemType === "web_search") return { icon: GlobeIcon };
+  if (workEntry.itemType === "image_view") return { icon: EyeIcon };
 
-  switch (workEntry.itemType) {
-    case "mcp_tool_call":
-      return WrenchIcon;
-    case "dynamic_tool_call":
-    case "collab_agent_tool_call":
-      return HammerIcon;
+  if (toolName === "Write" || toolName === "Edit" || toolName === "MultiEdit") {
+    return { icon: Pencil, colorClass: "text-amber-500 dark:text-amber-400" };
+  }
+  if (toolName === "Read" || toolName === "Glob" || toolName === "Grep") {
+    return { icon: EyeIcon };
+  }
+  if (toolName === "WebFetch" || toolName === "WebSearch") {
+    return { icon: GlobeIcon };
   }
 
-  return workToneIcon(workEntry.tone).icon;
+  return { icon: workToneIcon(workEntry.tone).icon };
+}
+
+function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
+  return workEntryIconInfo(workEntry).icon;
 }
 
 function capitalizePhrase(value: string): string {
@@ -985,7 +1045,8 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const hasRawPayload = workEntry.rawPayload != null;
   const iconConfig = workToneIcon(workEntry.tone);
-  const EntryIcon = workEntryIcon(workEntry);
+  const iconInfo = workEntryIconInfo(workEntry);
+  const EntryIcon = iconInfo.icon;
   const heading = toolWorkEntryHeading(workEntry);
   const rawPreview = workEntryPreview(workEntry, workspaceRoot);
   const preview =
@@ -1003,18 +1064,21 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
     <div className="rounded-lg px-1 py-1">
       <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
         <span
-          className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center",
+            iconInfo.colorClass ?? iconConfig.className,
+          )}
         >
           <EntryIcon className="size-3" />
         </span>
-        {workEntry.toolKind === "mcp" && (
-          <span className="shrink-0 rounded border border-teal-700/40 bg-teal-700/10 px-1 text-[9px] font-medium uppercase tracking-wide text-teal-700 dark:text-teal-300">
-            MCP
-          </span>
-        )}
-        {workEntry.toolKind === "agent" && (
-          <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1 text-[9px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-300">
-            AGENT
+        {iconInfo.kindLabel && (
+          <span
+            className={cn(
+              "shrink-0 rounded border px-1 text-[9px] font-medium tracking-wide",
+              iconInfo.kindBadgeClass,
+            )}
+          >
+            {iconInfo.kindLabel}
           </span>
         )}
         <div className="min-w-0 flex-1 overflow-hidden">

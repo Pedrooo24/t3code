@@ -139,6 +139,7 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { SubagentPanel } from "./chat/SubagentPanel";
+import { AgentInspectorDrawer } from "./chat/AgentInspectorDrawer";
 import { ChatHeader } from "./chat/ChatHeader";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
@@ -751,6 +752,7 @@ export default function ChatView(props: ChatViewProps) {
     [draftThreadsByThreadKey],
   );
   const [mountedTerminalThreadKeys, setMountedTerminalThreadKeys] = useState<string[]>([]);
+  const [inspectedAgentId, setInspectedAgentId] = useState<string | null>(null);
   const mountedTerminalThreadRefs = useMemo(
     () =>
       mountedTerminalThreadKeys.flatMap((mountedThreadKey) => {
@@ -3277,7 +3279,18 @@ export default function ChatView(props: ChatViewProps) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Messages Wrapper */}
           <div className="relative flex min-h-0 flex-1 flex-col">
-            <SubagentPanel activities={threadActivities} />
+            <SubagentPanel
+              activities={threadActivities}
+              inheritedModel={activeThread.modelSelection.model}
+              {...(((activeThread.modelSelection.options as Record<string, unknown> | null | undefined)
+                ?.reasoningEffort) != null
+                ? {
+                    inheritedEffort: (activeThread.modelSelection.options as Record<string, unknown>)
+                      .reasoningEffort as string,
+                  }
+                : {})}
+              onOpenDrawer={(id) => setInspectedAgentId(id)}
+            />
             {/* Messages — LegendList handles virtualization and scrolling internally */}
             <MessagesTimeline
               key={activeThread.id}
@@ -3487,6 +3500,18 @@ export default function ChatView(props: ChatViewProps) {
       {expandedImage && (
         <ExpandedImageDialog preview={expandedImage} onClose={closeExpandedImage} />
       )}
+
+      <AgentInspectorDrawer
+        open={inspectedAgentId !== null}
+        activityId={inspectedAgentId}
+        activities={threadActivities}
+        inheritedModel={activeThread?.modelSelection.model ?? null}
+        inheritedEffort={
+          ((activeThread?.modelSelection.options as Record<string, unknown> | null | undefined)
+            ?.reasoningEffort as string | null | undefined) ?? null
+        }
+        onClose={() => setInspectedAgentId(null)}
+      />
     </div>
   );
 }
