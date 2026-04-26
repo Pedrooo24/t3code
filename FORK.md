@@ -55,6 +55,16 @@ Status indicators sao codigo visual de estado - uniformizar tudo a teal dilui a 
 
 Racional: cada cor tem semantica propria. Misturar blue e teal para "coisas activas" cria ambiguidade desnecessaria - teal e o primary deste fork, blue nao existe.
 
+## Feature 1+2 — Observabilidade de agentes (em curso)
+
+Branch: `feat/agent-observability`. Plano: `effervescent-dancing-kettle.md`.
+
+- **Bug server corrigido:** `item.started` no `ProviderRuntimeIngestion.ts` agora propaga `data` (nome real, modelo, prompt do subagente) tal como `item.completed` ja fazia. Eliminado o "Agent" generio nos cards.
+- **Utilitarios client:** `classifyToolCall`, `subagentDescriptor`, `groupActivitiesBySubagent`, `extractFinalAgentResponse` adicionados a `session-logic.ts`. `deriveWorkLogEntries` aceita filtros opcionais.
+- **SubagentPanel enriquecido:** modelo e effort reais por agente (com badge "herdado da thread" quando herda), pills MCPs/Skills/tools contados por parentToolUseId, botao de drawer por card.
+- **AgentInspectorDrawer novo:** Sheet lateral com tabs Conversa/Resumo. Conversa mostra prompt inicial, timeline de actividades e resposta final ao orquestrador. Resumo agrupa MCPs por servidor, skills, ficheiros tocados e comandos bash.
+- **MessagesTimeline melhorado:** `classifyToolCall` aplica-se a cada tool call - MCP com ícone Plug teal, Skill com ícone Puzzle violet, Agent com ícone Bot emerald, Edit amber. Labels `MCP[server]/tool`, `Skill(name)`, `Agent(type)`.
+
 ## Feature 0 — MCPs por projecto (Claude)
 
 Isolamento de servidores MCP por projecto: threads paralelos em projectos diferentes carregam conjuntos distintos de MCPs.
