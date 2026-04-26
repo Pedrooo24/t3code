@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, Copy, ExternalLink } from "lucide-react";
 import type { OrchestrationThreadActivity } from "@t3tools/contracts";
 import { cn } from "~/lib/utils";
 import { strings } from "~/strings";
+import { subagentDescriptor, classifyToolCall } from "~/session-logic";
 
 const s = strings.subagents;
 
@@ -261,22 +262,59 @@ function CopyButton({ text }: { text: string }) {
 // ---------------------------------------------------------------------------
 // SubagentCard
 // ---------------------------------------------------------------------------
+function deriveAgentPills(
+  entry: SubagentEntry,
+  allActivities: ReadonlyArray<OrchestrationThreadActivity>,
+): { mcps: number; skills: number; tools: number } {
+  // Find activities that belong to this subagent by correlating via toolCallId
+  const p = entry.started.payload as Record<string, unknown> | null | undefined;
+  const data = p?.data as Record<string, unknown> | null | undefined;
+  const callId = typeof data?.toolCallId === "string" ? data.toolCallId : null;
+
+  // Find activities that are children of this subagent (parent_tool_use_id match)
+  const children = allActivities.filter((a) => {
+    const ap = a as OrchestrationThreadActivity & { parentToolUseId?: string };
+    return ap.parentToolUseId != null && ap.parentToolUseId === callId;
+  });
+
+  // If no parent_tool_use_id matches, use itemType proximity (fallback)
+  const relevant = children.length > 0 ? children : [];
+
+  let mcps = 0;
+  let skills = 0;
+  let tools = 0;
+
+  for (const a of relevant) {
+    if (a.kind !== "tool.started" && a.kind !== "tool.completed") continue;
+    const cls = classifyToolCall(a);
+    if (cls.kind === "mcp") mcps++;
+    else if (cls.kind === "skill") skills++;
+    else if (cls.kind !== "agent") tools++;
+  }
+
+  return { mcps, skills, tools };
+}
+
 function SubagentCard({
   entry,
+  allActivities,
   now,
   focused,
   dimmed,
   inheritedModel,
   inheritedEffort,
   onClick,
+  onOpenDrawer,
 }: {
   entry: SubagentEntry;
+  allActivities: ReadonlyArray<OrchestrationThreadActivity>;
   now: number;
   focused: boolean;
   dimmed: boolean;
   inheritedModel: string;
   inheritedEffort: string;
   onClick: () => void;
+  onOpenDrawer: (id: string) => void;
 }) {
   const status = statusBadge(entry, now);
   const name = subagentName(entry.started);
@@ -286,6 +324,23 @@ function SubagentCard({
       ? fixedDuration(entry.started, entry.completed)
       : formatElapsed(entry.started.createdAt, now);
   const output = entry.completed ? extractOutput(entry.completed) : null;
+
+  // Extract real model/effort from payload
+  const descriptor = subagentDescriptor(entry.started);
+  const realModel = descriptor?.model && descriptor.model !== "inherit" ? descriptor.model : null;
+  const realEffort = descriptor?.effort && descriptor.effort !== "inherit" ? descriptor.effort : null;
+  const displayModel = realModel ?? inheritedModel;
+  const displayEffort = realEffort ?? inheritedEffort;
+  const modelIsInherited = !realModel;
+  const effortIsInherited = !realEffort;
+
+  const pills = deriveAgentPills(entry, allActivities);
+  const hasPills = pills.mcps > 0 || pills.skills > 0 || pills.tools > 0;
+
+  function handleDrawerClick(e: React.MouseEvent | React.KeyboardEvent) {
+    e.stopPropagation();
+    onOpenDrawer(entry.started.id);
+  }
 
   return (
     <div
@@ -301,7 +356,7 @@ function SubagentCard({
         dimmed && "opacity-60",
       )}
     >
-      {/* L1: icon + name + status */}
+      {/* L1: icon + name + status + drawer button */}
       <div className="flex items-center gap-1.5">
         <Bot size={13} className="shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate text-xs font-medium">{name}</span>
@@ -316,29 +371,61 @@ function SubagentCard({
           )}
           {STATUS_LABELS[status]}
         </span>
+        <button
+          type="button"
+          title={s.verDetalhes}
+          onClick={handleDrawerClick}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleDrawerClick(e); }}
+          className="rounded p-0.5 text-muted-foreground/50 transition hover:text-foreground"
+        >
+          <ExternalLink size={11} />
+        </button>
       </div>
 
-      {/* L2: model + effort badges */}
+      {/* L2: model + effort badges - real values */}
       <div className="flex flex-wrap gap-1">
         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          {s.modelo}: {inheritedModel} ({s.herdado})
+          {s.modelo}: {displayModel}
+          {modelIsInherited && <span className="opacity-60"> · {s.herdadoDaThread}</span>}
         </span>
         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          {s.effort}: {inheritedEffort} ({s.herdado})
+          {s.effort}: {displayEffort}
+          {effortIsInherited && <span className="opacity-60"> · {s.herdadoDaThread}</span>}
         </span>
       </div>
 
-      {/* L3: description */}
+      {/* L3: pills MCPs / Skills / tools */}
+      {hasPills && (
+        <div className="flex flex-wrap gap-1">
+          {pills.mcps > 0 && (
+            <span className="rounded border border-teal-700/30 bg-teal-700/10 px-1.5 py-0.5 text-[9px] text-teal-600 dark:text-teal-400">
+              MCPs · {pills.mcps}
+            </span>
+          )}
+          {pills.skills > 0 && (
+            <span className="rounded border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[9px] text-violet-600 dark:text-violet-400">
+              Skills · {pills.skills}
+            </span>
+          )}
+          {pills.tools > 0 && (
+            <span className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+              tools · {pills.tools}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* L4: description */}
       {desc && (
         <p className="text-[11px] leading-snug opacity-70">{desc}</p>
       )}
 
-      {/* L4: timer */}
+      {/* L5: timer */}
       {timer && (
-        <div className="tabular-nums text-[10px] text-muted-foreground">{timer}</div>
+        <div className="tabular-nums text-[10px] text-muted-foreground">↳ {timer}</div>
       )}
 
-      {/* L5: output (completed only) */}
+      {/* L6: output (completed only) */}
       {output && (
         <details className="text-xs">
           <summary className="cursor-pointer select-none text-[11px] text-muted-foreground hover:text-foreground">
@@ -361,11 +448,13 @@ export function SubagentPanel({
   activities,
   inheritedModel,
   inheritedEffort,
+  onOpenDrawer,
   className,
 }: {
   activities: ReadonlyArray<OrchestrationThreadActivity>;
   inheritedModel?: string;
   inheritedEffort?: string;
+  onOpenDrawer?: (activityId: string) => void;
   className?: string;
 }) {
   const now = useNow();
@@ -382,6 +471,10 @@ export function SubagentPanel({
 
   function handleCardClick(id: string) {
     setFocusedId((prev) => (prev === id ? null : id));
+  }
+
+  function handleOpenDrawer(id: string) {
+    onOpenDrawer?.(id);
   }
 
   return (
@@ -408,12 +501,14 @@ export function SubagentPanel({
             <SubagentCard
               key={entry.started.id}
               entry={entry}
+              allActivities={activities}
               now={now}
               focused={focusedId === entry.started.id}
               dimmed={focusedId !== null && focusedId !== entry.started.id}
               inheritedModel={model}
               inheritedEffort={effort}
               onClick={() => handleCardClick(entry.started.id)}
+              onOpenDrawer={handleOpenDrawer}
             />
           ))}
         </div>
