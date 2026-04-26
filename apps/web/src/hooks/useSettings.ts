@@ -9,7 +9,7 @@
  * write. The hook transparently routes reads/writes to the correct backing
  * store.
  */
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { ServerSettings, ServerSettingsPatch } from "@t3tools/contracts";
 import {
   type ClientSettings,
@@ -18,6 +18,7 @@ import {
   UnifiedSettings,
 } from "@t3tools/contracts/settings";
 import { ensureLocalApi } from "~/localApi";
+import { shallowEqual } from "~/lib/shallowEqual";
 import { Struct } from "effect";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { applySettingsUpdated, getServerConfig, useServerSettings } from "~/rpc/serverState";
@@ -138,7 +139,17 @@ export function useSettings<T = UnifiedSettings>(selector?: (s: UnifiedSettings)
     [clientSettings, serverSettings],
   );
 
-  return useMemo(() => (selector ? selector(merged) : (merged as T)), [merged, selector]);
+  // Usar useRef em vez de useMemo para estabilizar a referencia quando o
+  // selector devolve objecto novo com os mesmos valores (arrow inline).
+  // Recalcular o selector a cada render e barato; o que evitamos e propagar
+  // uma nova referencia para baixo quando os valores nao mudaram.
+  const lastRef = useRef<T | null>(null);
+  const next = selector ? selector(merged) : (merged as unknown as T);
+  if (lastRef.current !== null && shallowEqual(lastRef.current, next)) {
+    return lastRef.current;
+  }
+  lastRef.current = next;
+  return next;
 }
 
 /**
